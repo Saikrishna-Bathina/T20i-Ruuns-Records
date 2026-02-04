@@ -126,6 +126,12 @@
                     <option value="All">All Countries</option>
                     <!-- Countries will be populated here -->
                 </select>
+
+                <label for="inningsOppositionSelect">Filter by Opposition:</label>
+                <select id="inningsOppositionSelect" onchange="updateFastestInningsTable()">
+                    <option value="All">All Oppositions</option>
+                    <!-- Oppositions will be populated here -->
+                </select>
             </div>
 
             <div class="table-wrapper">
@@ -135,6 +141,8 @@
                             <th>Rank</th>
                             <th>Country</th>
                             <th>Player</th>
+                            <th>Opposition</th>
+                            <th>Venue</th>
                             <th>Balls</th>
                             <th>Date</th>
                             <th>Final Score</th>

@@ -183,6 +183,8 @@ def process_data():
             innings_stats[key] = {
                 "name": striker,
                 "team": team,
+                "venue": row.get('venue'),
+                "opposition": row.get('bowling_team'),
                 "runs": 0,
                 "balls": 0,
                 "date": date,
@@ -280,6 +282,8 @@ def process_data():
             milestone_data.append({
                 "name": inn['name'],
                 "team": inn['team'],
+                "minq": inn['opposition'],
+                "venue": inn['venue'],
                 "balls": inn['milestones'][m],
                 "date": inn['date'],
                 "runs": inn['runs'] # Final score

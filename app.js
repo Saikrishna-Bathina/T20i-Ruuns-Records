@@ -73,10 +73,19 @@ function renderHighestScores() {
 
 function populateCountryDropdown() {
     const countrySet = new Set();
+    const oppositionSet = new Set();
 
     // Collect all countries from fastest milestones data
     for (const milestone in statsData.fastest_milestones) {
         statsData.fastest_milestones[milestone].forEach(p => countrySet.add(p.team));
+    }
+
+    // Also collect from fastest innings for opposition
+    for (const milestone in statsData.fastest_innings_milestones) {
+        statsData.fastest_innings_milestones[milestone].forEach(p => {
+            countrySet.add(p.team);
+            if (p.minq) oppositionSet.add(p.minq);
+        });
     }
 
     const select = document.getElementById('countrySelect');
@@ -94,6 +103,16 @@ function populateCountryDropdown() {
             option.value = country;
             option.textContent = country;
             selectInnings.appendChild(option);
+        });
+    }
+
+    const selectOpposition = document.getElementById('inningsOppositionSelect');
+    if (selectOpposition) {
+        [...oppositionSet].sort().forEach(opp => {
+            const option = document.createElement('option');
+            option.value = opp;
+            option.textContent = opp;
+            selectOpposition.appendChild(option);
         });
     }
 }
@@ -164,6 +183,7 @@ function updateFastestTable() {
 function updateFastestInningsTable() {
     const milestone = document.getElementById('inningsMilestoneSelect').value;
     const countryFilter = document.getElementById('inningsCountrySelect').value;
+    const oppositionFilter = document.getElementById('inningsOppositionSelect').value;
     const tbody = document.querySelector('#fastestInningsTable tbody');
     tbody.innerHTML = '';
 
@@ -173,8 +193,12 @@ function updateFastestInningsTable() {
         data = data.filter(p => p.team === countryFilter);
     }
 
+    if (oppositionFilter && oppositionFilter !== 'All') {
+        data = data.filter(p => p.minq === oppositionFilter);
+    }
+
     if (data.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6">No records found for this milestone.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8">No records found for this milestone.</td></tr>';
         return;
     }
 
@@ -186,6 +210,8 @@ function updateFastestInningsTable() {
                 <td>${index + 1}</td>
                 <td>${record.team}</td>
                 <td>${record.name}</td>
+                <td>${record.minq}</td>
+                <td>${record.venue}</td>
                 <td>${record.balls}</td>
                 <td>${record.date}</td>
                 <td>${record.runs}</td>
