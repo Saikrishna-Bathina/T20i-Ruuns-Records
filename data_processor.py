@@ -111,6 +111,7 @@ def process_data():
     # }
 
     milestones = [1000, 2000, 3000, 4000, 5000]
+    innings_milestones = [50, 100, 150, 200]
 
     for row in data_rows:
         striker = row.get('striker')
@@ -185,13 +186,24 @@ def process_data():
                 "runs": 0,
                 "balls": 0,
                 "date": date,
-                "is_out": False
+                "is_out": False,
+                "milestones": {}
             }
             
+        current_runs = innings_stats[key]['runs']
         innings_stats[key]['runs'] += runs
         if wides == 0:
             innings_stats[key]['balls'] += 1
             
+        new_runs = innings_stats[key]['runs']
+        current_balls = innings_stats[key]['balls']
+        
+        for m in innings_milestones:
+            if current_runs < m and new_runs >= m:
+                # Record the ball count when they reached the milestone
+                if m not in innings_stats[key]['milestones']:
+                     innings_stats[key]['milestones'][m] = current_balls
+
         if player_dismissed and player_dismissed == striker:
             innings_stats[key]['is_out'] = True
 
@@ -254,11 +266,32 @@ def process_data():
     all_innings.sort(key=lambda x: x['runs'], reverse=True)
     highest_scores_list = all_innings[:10] # Top 10
 
+    # 4. Fastest Innings Milestones
+    fastest_innings_milestones = {}
+    
+    for m in innings_milestones:
+        # Filter innings that reached this milestone
+        reached = [inn for inn in all_innings if m in inn['milestones']]
+        # Sort by balls taken to reach it
+        reached.sort(key=lambda x: x['milestones'][m])
+        
+        milestone_data = []
+        for inn in reached:
+            milestone_data.append({
+                "name": inn['name'],
+                "team": inn['team'],
+                "balls": inn['milestones'][m],
+                "date": inn['date'],
+                "runs": inn['runs'] # Final score
+            })
+        fastest_innings_milestones[str(m)] = milestone_data
+
     final_data = {
         "most_runs": most_runs_list,
         "fastest_milestones": fastest_milestones,
         "fastest_milestones_innings": fastest_milestones_innings,
-        "highest_scores": highest_scores_list
+        "highest_scores": highest_scores_list,
+        "fastest_innings_milestones": fastest_innings_milestones
     }
     
     OUTPUT_FILE = "data.js"

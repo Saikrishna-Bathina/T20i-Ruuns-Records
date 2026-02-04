@@ -20,6 +20,7 @@
             <button class="tab-btn active" onclick="switchTab('mostRun')">Most Runs</button>
             <button class="tab-btn" onclick="switchTab('highestScore')">Highest Scores</button>
             <button class="tab-btn" onclick="switchTab('fastest')">Fastest to Milestones</button>
+            <button class="tab-btn" onclick="switchTab('fastestInnings')">Fastest Innings</button>
         </nav>
 
         <main id="mostRun" class="tab-content active">
@@ -98,6 +99,45 @@
                             <th>Player</th>
                             <th>Team</th>
                             <th>Balls Faced</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Data will be populated here -->
+                    </tbody>
+                </table>
+            </div>
+        </main>
+        </main>
+
+        <main id="fastestInnings" class="tab-content">
+            <h2>Fastest Innings Milestones (by Country)</h2>
+
+            <div class="controls">
+                <label for="inningsMilestoneSelect">Milestone:</label>
+                <select id="inningsMilestoneSelect" onchange="updateFastestInningsTable()">
+                    <option value="50">Fastest 50</option>
+                    <option value="100">Fastest 100</option>
+                    <option value="150">Fastest 150</option>
+                    <option value="200">Fastest 200</option>
+                </select>
+
+                <label for="inningsCountrySelect">Filter by Country:</label>
+                <select id="inningsCountrySelect" onchange="updateFastestInningsTable()">
+                    <option value="All">All Countries</option>
+                    <!-- Countries will be populated here -->
+                </select>
+            </div>
+
+            <div class="table-wrapper">
+                <table id="fastestInningsTable">
+                    <thead>
+                        <tr>
+                            <th>Rank</th>
+                            <th>Country</th>
+                            <th>Player</th>
+                            <th>Balls</th>
+                            <th>Date</th>
+                            <th>Final Score</th>
                         </tr>
                     </thead>
                     <tbody>

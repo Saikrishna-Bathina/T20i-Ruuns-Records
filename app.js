@@ -15,6 +15,7 @@ function initDashboard() {
     renderHighestScores();
     populateCountryDropdown();
     updateFastestTable();
+    updateFastestInningsTable();
 }
 
 function switchTab(tabId) {
@@ -85,6 +86,16 @@ function populateCountryDropdown() {
         option.textContent = country;
         select.appendChild(option);
     });
+
+    const selectInnings = document.getElementById('inningsCountrySelect');
+    if (selectInnings) {
+        [...countrySet].sort().forEach(country => {
+            const option = document.createElement('option');
+            option.value = country;
+            option.textContent = country;
+            selectInnings.appendChild(option);
+        });
+    }
 }
 
 function updateFastestTable() {
@@ -144,6 +155,40 @@ function updateFastestTable() {
                 <td>${player.name}</td>
                 <td>${player.team}</td>
                 <td>${value}</td>
+            </tr>
+        `;
+        tbody.innerHTML += row;
+    });
+}
+
+function updateFastestInningsTable() {
+    const milestone = document.getElementById('inningsMilestoneSelect').value;
+    const countryFilter = document.getElementById('inningsCountrySelect').value;
+    const tbody = document.querySelector('#fastestInningsTable tbody');
+    tbody.innerHTML = '';
+
+    let data = statsData.fastest_innings_milestones?.[milestone] || [];
+
+    if (countryFilter && countryFilter !== 'All') {
+        data = data.filter(p => p.team === countryFilter);
+    }
+
+    if (data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6">No records found for this milestone.</td></tr>';
+        return;
+    }
+
+    // Show top 50 (or filtered list)
+    // Data is already sorted by balls from python script
+    data.slice(0, 100).forEach((record, index) => {
+        const row = `
+            <tr>
+                <td>${index + 1}</td>
+                <td>${record.team}</td>
+                <td>${record.name}</td>
+                <td>${record.balls}</td>
+                <td>${record.date}</td>
+                <td>${record.runs}</td>
             </tr>
         `;
         tbody.innerHTML += row;
