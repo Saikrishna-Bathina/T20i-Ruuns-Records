@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>T20i Stats Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <h1>T20 International Stats</h1>
+            <p>Comprehensive records for Men's T20 Internationals</p>
+        </header>
+
+        <nav>
+            <button class="tab-btn active" onclick="switchTab('mostRun')">Most Runs</button>
+            <button class="tab-btn" onclick="switchTab('highestScore')">Highest Scores</button>
+            <button class="tab-btn" onclick="switchTab('fastest')">Fastest to Milestones</button>
+        </nav>
+
+        <main id="mostRun" class="tab-content active">
+            <h2>Most Runs in T20i History</h2>
+            <div class="table-wrapper">
+                <table id="mostRunsTable">
+                    <thead>
+                        <tr>
+                            <th>Rank</th>
+                            <th>Player</th>
+                            <th>Team</th>
+                            <th>Runs</th>
+                            <th>Balls Faced</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Data will be populated here -->
+                    </tbody>
+                </table>
+            </div>
+        </main>
+
+        <main id="highestScore" class="tab-content">
+            <h2>Highest Score in an Innings</h2>
+            <div class="table-wrapper">
+                <table id="highestScoreTable">
+                    <thead>
+                        <tr>
+                            <th>Rank</th>
+                            <th>Player</th>
+                            <th>Team</th>
+                            <th>Runs</th>
+                            <th>Balls</th>
+                            <th>Strike Rate</th>
+                            <th>Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Data will be populated here -->
+                    </tbody>
+                </table>
+            </div>
+        </main>
+
+        <main id="fastest" class="tab-content">
+            <h2>Fastest to Milestones (Balls Faced)</h2>
+
+            <div class="controls">
+                <label for="milestoneSelect">Milestone:</label>
+                <select id="milestoneSelect" onchange="updateFastestTable()">
+                    <option value="1000">1000 Runs</option>
+                    <option value="2000">2000 Runs</option>
+                    <option value="3000">3000 Runs</option>
+                    <option value="4000">4000 Runs</option>
+                    <option value="5000">5000 Runs</option>
+                </select>
+
+                <label for="countrySelect">Filter by Country:</label>
+                <select id="countrySelect" onchange="updateFastestTable()">
+                    <option value="All">All Countries</option>
+                    <!-- Countries will be populated here -->
+                </select>
+
+                <label for="metricSelect">Metric:</label>
+                <select id="metricSelect" onchange="updateFastestTable()">
+                    <option value="balls">By Balls Faced</option>
+                    <option value="innings">By Innings Played</option>
+                </select>
+            </div>
+
+            <div class="table-wrapper">
+                <table id="fastestTable">
+                    <thead>
+                        <tr>
+                            <th>Rank</th>
+                            <th>Player</th>
+                            <th>Team</th>
+                            <th>Balls Faced</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Data will be populated here -->
+                    </tbody>
+                </table>
+            </div>
+        </main>
+    </div>
+
+    <script src="data.js"></script>
+    <script src="app.js"></script>
+</body>
+
+</html>
