@@ -11,6 +11,7 @@ A comprehensive dashboard for visualizing Men's T20 International cricket statis
 - **Fastest Innings Milestones**:
     - Fastest 50, 100, 150, and 200 runs in a single innings.
     - Advanced filtering by **Country**, **Opposition**, and **Batting Position**.
+- **Player Search**: Real-time search by name across all record tables.
 
 ## How it Works
 1.  **Data Source**: The project downloads raw ball-by-ball data from [Cricsheet](https://cricsheet.org/).

@@ -41,6 +41,9 @@
                     <option value="10">10</option>
                     <option value="11">11</option>
                 </select>
+
+                <label for="mostRunsSearch">Search Player:</label>
+                <input type="text" id="mostRunsSearch" placeholder="Enter name..." onkeyup="updateMostRunsTable()">
             </div>
 
             <div class="table-wrapper">
@@ -107,6 +110,9 @@
                     <option value="balls">By Balls Faced</option>
                     <option value="innings">By Innings Played</option>
                 </select>
+
+                <label for="fastestSearch">Search Player:</label>
+                <input type="text" id="fastestSearch" placeholder="Enter name..." onkeyup="updateFastestTable()">
             </div>
 
             <div class="table-wrapper">
@@ -124,7 +130,6 @@
                     </tbody>
                 </table>
             </div>
-        </main>
         </main>
 
         <main id="fastestInnings" class="tab-content">
@@ -165,6 +170,10 @@
                     <option value="10">10</option>
                     <option value="11">11</option>
                 </select>
+
+                <label for="fastestInningsSearch">Search Player:</label>
+                <input type="text" id="fastestInningsSearch" placeholder="Enter name..."
+                    onkeyup="updateFastestInningsTable()">
             </div>
 
             <div class="table-wrapper">

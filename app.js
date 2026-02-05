@@ -11,8 +11,8 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function initDashboard() {
-    updateMostRunsTable();
-    renderHighestScores();
+    if (statsData.most_runs) updateMostRunsTable();
+    if (statsData.highest_scores) renderHighestScores();
     populateCountryDropdown();
     updateFastestTable();
     updateFastestInningsTable();
@@ -28,6 +28,8 @@ function switchTab(tabId) {
 
 function updateMostRunsTable() {
     const positionFilter = document.getElementById('mostRunsPositionSelect').value;
+    const searchInput = document.getElementById('mostRunsSearch');
+    const searchQuery = searchInput ? searchInput.value.toLowerCase() : '';
     const tbody = document.querySelector('#mostRunsTable tbody');
     tbody.innerHTML = '';
 
@@ -38,8 +40,12 @@ function updateMostRunsTable() {
         data = statsData.most_runs_by_position?.[positionFilter] || [];
     }
 
+    if (searchQuery) {
+        data = data.filter(p => p.name.toLowerCase().includes(searchQuery));
+    }
+
     if (data.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5">No records found for this position.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5">No records found.</td></tr>';
         return;
     }
 
@@ -134,6 +140,8 @@ function updateFastestTable() {
     const milestone = document.getElementById('milestoneSelect').value;
     const countryFilter = document.getElementById('countrySelect').value;
     const metric = document.getElementById('metricSelect').value;
+    const searchInput = document.getElementById('fastestSearch');
+    const searchQuery = searchInput ? searchInput.value.toLowerCase() : '';
     const tbody = document.querySelector('#fastestTable tbody');
     const headerRow = document.querySelector('#fastestTable thead tr');
 
@@ -167,6 +175,10 @@ function updateFastestTable() {
         data = data.filter(p => p.team === countryFilter);
     }
 
+    if (searchQuery) {
+        data = data.filter(p => p.name.toLowerCase().includes(searchQuery));
+    }
+
     // Sort just in case (though python script sorts)
     if (metric === 'balls') {
         data.sort((a, b) => a.balls - b.balls);
@@ -198,6 +210,8 @@ function updateFastestInningsTable() {
     const countryFilter = document.getElementById('inningsCountrySelect').value;
     const oppositionFilter = document.getElementById('inningsOppositionSelect').value;
     const positionFilter = document.getElementById('inningsPositionSelect').value;
+    const searchInput = document.getElementById('fastestInningsSearch');
+    const searchQuery = searchInput ? searchInput.value.toLowerCase() : '';
     const tbody = document.querySelector('#fastestInningsTable tbody');
     tbody.innerHTML = '';
 
@@ -215,8 +229,12 @@ function updateFastestInningsTable() {
         data = data.filter(p => p.position === positionFilter);
     }
 
+    if (searchQuery) {
+        data = data.filter(p => p.name.toLowerCase().includes(searchQuery));
+    }
+
     if (data.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="9">No records found for this milestone.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9">No records found.</td></tr>';
         return;
     }
 
