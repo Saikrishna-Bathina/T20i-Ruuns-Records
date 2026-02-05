@@ -25,6 +25,24 @@
 
         <main id="mostRun" class="tab-content active">
             <h2>Most Runs in T20i History</h2>
+
+            <div class="controls">
+                <label for="mostRunsPositionSelect">Filter by Position:</label>
+                <select id="mostRunsPositionSelect" onchange="updateMostRunsTable()">
+                    <option value="All">All Positions</option>
+                    <option value="Opener">Opener</option>
+                    <option value="3">3</option>
+                    <option value="4">4</option>
+                    <option value="5">5</option>
+                    <option value="6">6</option>
+                    <option value="7">7</option>
+                    <option value="8">8</option>
+                    <option value="9">9</option>
+                    <option value="10">10</option>
+                    <option value="11">11</option>
+                </select>
+            </div>
+
             <div class="table-wrapper">
                 <table id="mostRunsTable">
                     <thead>
@@ -132,6 +150,21 @@
                     <option value="All">All Oppositions</option>
                     <!-- Oppositions will be populated here -->
                 </select>
+
+                <label for="inningsPositionSelect">Filter by Position:</label>
+                <select id="inningsPositionSelect" onchange="updateFastestInningsTable()">
+                    <option value="All">All Positions</option>
+                    <option value="Opener">Opener</option>
+                    <option value="3">3</option>
+                    <option value="4">4</option>
+                    <option value="5">5</option>
+                    <option value="6">6</option>
+                    <option value="7">7</option>
+                    <option value="8">8</option>
+                    <option value="9">9</option>
+                    <option value="10">10</option>
+                    <option value="11">11</option>
+                </select>
             </div>
 
             <div class="table-wrapper">
@@ -141,6 +174,7 @@
                             <th>Rank</th>
                             <th>Country</th>
                             <th>Player</th>
+                            <th>Position</th>
                             <th>Opposition</th>
                             <th>Venue</th>
                             <th>Balls</th>

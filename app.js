@@ -11,7 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function initDashboard() {
-    renderMostRuns();
+    updateMostRunsTable();
     renderHighestScores();
     populateCountryDropdown();
     updateFastestTable();
@@ -26,11 +26,24 @@ function switchTab(tabId) {
     document.querySelector(`button[onclick="switchTab('${tabId}')"]`).classList.add('active');
 }
 
-function renderMostRuns() {
+function updateMostRunsTable() {
+    const positionFilter = document.getElementById('mostRunsPositionSelect').value;
     const tbody = document.querySelector('#mostRunsTable tbody');
     tbody.innerHTML = '';
 
-    statsData.most_runs.forEach((player, index) => {
+    let data;
+    if (positionFilter === 'All') {
+        data = statsData.most_runs;
+    } else {
+        data = statsData.most_runs_by_position?.[positionFilter] || [];
+    }
+
+    if (data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5">No records found for this position.</td></tr>';
+        return;
+    }
+
+    data.slice(0, 50).forEach((player, index) => {
         const row = `
             <tr>
                 <td>${index + 1}</td>
@@ -184,6 +197,7 @@ function updateFastestInningsTable() {
     const milestone = document.getElementById('inningsMilestoneSelect').value;
     const countryFilter = document.getElementById('inningsCountrySelect').value;
     const oppositionFilter = document.getElementById('inningsOppositionSelect').value;
+    const positionFilter = document.getElementById('inningsPositionSelect').value;
     const tbody = document.querySelector('#fastestInningsTable tbody');
     tbody.innerHTML = '';
 
@@ -197,8 +211,12 @@ function updateFastestInningsTable() {
         data = data.filter(p => p.minq === oppositionFilter);
     }
 
+    if (positionFilter && positionFilter !== 'All') {
+        data = data.filter(p => p.position === positionFilter);
+    }
+
     if (data.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8">No records found for this milestone.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9">No records found for this milestone.</td></tr>';
         return;
     }
 
@@ -210,6 +228,7 @@ function updateFastestInningsTable() {
                 <td>${index + 1}</td>
                 <td>${record.team}</td>
                 <td>${record.name}</td>
+                <td>${record.position || 'N/A'}</td>
                 <td>${record.minq}</td>
                 <td>${record.venue}</td>
                 <td>${record.balls}</td>

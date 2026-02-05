@@ -167,19 +167,53 @@ def process_data():
     # Since we sorted by match/date, we can track current innings stats.
     
     print("Calculating highest scores...")
-    innings_stats = {} # Key: (match_id, striker) -> {runs, balls, team, date, is_out}
+    innings_stats = {} # Key: (match_id, striker) -> {runs, balls, team, date, is_out, position}
     
+    # Checkpoint variables for batting order tracking
+    current_match_innings = None
+    batters_seen = []
+
     for row in data_rows:
         mid = row.get('match_id')
         striker = row.get('striker')
+        non_striker = row.get('non_striker')
         runs = int(row.get('runs_off_bat', 0))
         wides = int(row.get('wides', 0)) if row.get('wides') else 0
         date = row.get('start_date')
         team = row.get('batting_team')
         player_dismissed = row.get('player_dismissed')
         
+        # Determine Batting Position
+        # Key for tracking innings changes: (match_id, batting_team) or (match_id, innings)? 
+        # using (match_id, innings) is safest as per sort order.
+        innings_num = row.get('innings')
+        mi_key = (mid, innings_num)
+        
+        if mi_key != current_match_innings:
+            current_match_innings = mi_key
+            batters_seen = []
+        
+        # Add batters if seen for the first time in this innings
+        # Note: Openers might appear in any order on line 1, but usually Striker is #1.
+        if striker not in batters_seen:
+            batters_seen.append(striker)
+        if non_striker not in batters_seen:
+            batters_seen.append(non_striker)
+            
+        # Helper to get position string
+        def get_position_str(player, b_list):
+            try:
+                idx = b_list.index(player)
+                if idx < 2:
+                    return "Opener"
+                else:
+                    return str(idx + 1)
+            except ValueError:
+                return "N/A" # Should not happen
+
         key = (mid, striker)
         if key not in innings_stats:
+            pos = get_position_str(striker, batters_seen)
             innings_stats[key] = {
                 "name": striker,
                 "team": team,
@@ -189,7 +223,8 @@ def process_data():
                 "balls": 0,
                 "date": date,
                 "is_out": False,
-                "milestones": {}
+                "milestones": {},
+                "position": pos
             }
             
         current_runs = innings_stats[key]['runs']
@@ -205,6 +240,7 @@ def process_data():
                 # Record the ball count when they reached the milestone
                 if m not in innings_stats[key]['milestones']:
                      innings_stats[key]['milestones'][m] = current_balls
+                     # Capture position at milestone time? No, position is static for the innings.
 
         if player_dismissed and player_dismissed == striker:
             innings_stats[key]['is_out'] = True
@@ -212,6 +248,41 @@ def process_data():
     
     print("Formatting output...")
     
+    # NEW: Calculate Most Runs by Position
+    # Key: Position -> { PlayerName -> {runs, balls, innings} }
+    position_stats = {} 
+    
+    for key, stats in innings_stats.items():
+        pos = stats['position']
+        name = stats['name']
+        team = stats['team']
+        runs = stats['runs']
+        balls = stats['balls']
+        
+        if pos not in position_stats:
+            position_stats[pos] = {}
+        
+        if name not in position_stats[pos]:
+            position_stats[pos][name] = {
+                "name": name,
+                "team": team,
+                "runs": 0,
+                "balls": 0,
+                "innings": 0
+            }
+            
+        position_stats[pos][name]['runs'] += runs
+        position_stats[pos][name]['balls'] += balls
+        position_stats[pos][name]['innings'] += 1
+
+    # Convert to list and sort
+    most_runs_by_position = {}
+    for pos, players_dict in position_stats.items():
+        p_list = list(players_dict.values())
+        p_list.sort(key=lambda x: x['runs'], reverse=True)
+        most_runs_by_position[pos] = p_list[:50] # Top 50 per position
+
+
     # 1. Most Runs
     # Convert dict to list
     all_players = list(players.values())
@@ -286,12 +357,14 @@ def process_data():
                 "venue": inn['venue'],
                 "balls": inn['milestones'][m],
                 "date": inn['date'],
-                "runs": inn['runs'] # Final score
+                "runs": inn['runs'], # Final score
+                "position": inn['position']
             })
         fastest_innings_milestones[str(m)] = milestone_data
-
+        
     final_data = {
         "most_runs": most_runs_list,
+        "most_runs_by_position": most_runs_by_position,
         "fastest_milestones": fastest_milestones,
         "fastest_milestones_innings": fastest_milestones_innings,
         "highest_scores": highest_scores_list,
