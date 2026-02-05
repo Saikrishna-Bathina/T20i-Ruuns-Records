@@ -311,7 +311,7 @@ function updatePhaseStatsTable() {
                 <th>Team</th>
                 <th>Opposition</th>
                 <th>Venue</th>
-                <th>Runs</th>
+                <th>Score</th>
                 <th>Date</th>
             </tr>
         `;
@@ -426,7 +426,7 @@ function updatePhaseStatsTable() {
                     <td>${item.team}</td>
                     <td>${item.opposition}</td>
                     <td>${item.venue ? item.venue : 'N/A'}</td>
-                    <td>${item.runs}</td>
+                    <td>${item.runs}/${item.wickets !== undefined ? item.wickets : 0}</td>
                     <td>${item.date}</td>
                 </tr>
             `;

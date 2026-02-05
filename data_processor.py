@@ -266,14 +266,16 @@ def process_data():
                 "opposition": opposition,
                 "date": date,
                 "venue": row.get('venue'),
-                "Powerplay": 0,
-                "Middle": 0,
-                "Death": 0
+                "Powerplay": {"runs": 0, "wickets": 0},
+                "Middle": {"runs": 0, "wickets": 0},
+                "Death": {"runs": 0, "wickets": 0}
             }
             
         # Update Team Phase Score
         phase = get_phase(ball_val)
-        team_innings_stats[mi_key][phase] += (runs + extras)
+        team_innings_stats[mi_key][phase]["runs"] += (runs + extras)
+        if player_dismissed:
+             team_innings_stats[mi_key][phase]["wickets"] += 1
         
         # Add batters if seen for the first time in this innings
         if striker not in batters_seen:
@@ -338,13 +340,14 @@ def process_data():
                 }
             }
             
-        # Bowler runs conceded (runs off bat + wides + noballs)
-        b_runs = runs + wides + noballs
-        bowler_innings_stats[b_key]['phases'][phase]['r'] += b_runs
-        
-        # Bowler Wickets
-        if wicket_type and wicket_type not in ["run out", "retired hurt", "retired out", "obstructing the field", "timed out"]:
-             bowler_innings_stats[b_key]['phases'][phase]['w'] += 1
+        # Update Bowler Phase Stats
+        bowler_innings_stats[b_key]["phases"][phase]["r"] += (runs + wides + noballs) 
+        # For bowler wickets, exclude run outs
+        if player_dismissed and wicket_type not in ["run out", "retired hurt", "retired out", "obstructing the field", "timed out"]:
+            bowler_innings_stats[b_key]["phases"][phase]["w"] += 1
+
+
+
         
         for m in innings_milestones:
             if current_runs < m and new_runs >= m:
@@ -502,11 +505,12 @@ def process_data():
     
     for key, stats in team_innings_stats.items():
         for phase in phases:
-            if stats[phase] > 0:
+            if stats[phase]['runs'] > 0:
                 team_highs[phase].append({
                     "team": stats['team'],
                     "opposition": stats['opposition'],
-                    "runs": stats[phase],
+                    "runs": stats[phase]['runs'],
+                    "wickets": stats[phase]['wickets'],
                     "date": stats['date'],
                     "venue": stats.get('venue', 'N/A')
                 })
