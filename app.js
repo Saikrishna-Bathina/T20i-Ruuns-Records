@@ -16,6 +16,7 @@ function initDashboard() {
     populateCountryDropdown();
     updateFastestTable();
     updateFastestInningsTable();
+    updatePhaseStatsTable();
 }
 
 function switchTab(tabId) {
@@ -108,16 +109,25 @@ function populateCountryDropdown() {
     }
 
     const select = document.getElementById('countrySelect');
-    [...countrySet].sort().forEach(country => {
+    const selectInnings = document.getElementById('inningsCountrySelect');
+    const selectOpposition = document.getElementById('inningsOppositionSelect');
+    const phaseCountrySelect = document.getElementById('phaseCountrySelect');
+    const phaseOppositionSelect = document.getElementById('phaseOppositionSelect');
+
+    const sortedCountries = [...countrySet].sort();
+    const sortedOppositions = [...oppositionSet].sort();
+
+    // Populate main country dropdown
+    sortedCountries.forEach(country => {
         const option = document.createElement('option');
         option.value = country;
         option.textContent = country;
         select.appendChild(option);
     });
 
-    const selectInnings = document.getElementById('inningsCountrySelect');
+    // Populate innings country dropdown
     if (selectInnings) {
-        [...countrySet].sort().forEach(country => {
+        sortedCountries.forEach(country => {
             const option = document.createElement('option');
             option.value = country;
             option.textContent = country;
@@ -125,13 +135,32 @@ function populateCountryDropdown() {
         });
     }
 
-    const selectOpposition = document.getElementById('inningsOppositionSelect');
+    // Populate Phase Stats Country Dropdown
+    if (phaseCountrySelect) {
+        sortedCountries.forEach(country => {
+            const option = document.createElement('option');
+            option.value = country;
+            option.textContent = country;
+            phaseCountrySelect.appendChild(option);
+        });
+    }
+
     if (selectOpposition) {
-        [...oppositionSet].sort().forEach(opp => {
+        sortedOppositions.forEach(opp => {
             const option = document.createElement('option');
             option.value = opp;
             option.textContent = opp;
             selectOpposition.appendChild(option);
+        });
+    }
+
+    // Populate Phase Stats Opposition Dropdown
+    if (phaseOppositionSelect) {
+        sortedOppositions.forEach(opp => {
+            const option = document.createElement('option');
+            option.value = opp;
+            option.textContent = opp;
+            phaseOppositionSelect.appendChild(option);
         });
     }
 }
@@ -254,6 +283,199 @@ function updateFastestInningsTable() {
                 <td>${record.runs}</td>
             </tr>
         `;
+        tbody.innerHTML += row;
+    });
+}
+
+function updatePhaseStatsTable() {
+    const phase = document.getElementById('phaseSelect').value;
+    const category = document.getElementById('phaseCategorySelect').value;
+    const countryFilter = document.getElementById('phaseCountrySelect') ? document.getElementById('phaseCountrySelect').value : 'All';
+    const oppositionFilter = document.getElementById('phaseOppositionSelect') ? document.getElementById('phaseOppositionSelect').value : 'All';
+    const sortOrder = document.getElementById('sortOrder') ? document.getElementById('sortOrder').value : 'desc';
+
+    const searchInput = document.getElementById('phaseSearch');
+    const searchQuery = searchInput ? searchInput.value.toLowerCase() : '';
+    const tbody = document.querySelector('#phaseStatsTable tbody');
+    const thead = document.querySelector('#phaseStatsTable thead');
+
+    tbody.innerHTML = '';
+    thead.innerHTML = '';
+
+    // Set Headers based on category
+    let headers = '';
+    if (category === 'team_innings_highs') {
+        headers = `
+            <tr>
+                <th>Rank</th>
+                <th>Team</th>
+                <th>Opposition</th>
+                <th>Venue</th>
+                <th>Runs</th>
+                <th>Date</th>
+            </tr>
+        `;
+    } else if (category === 'batsman_runs') {
+        headers = `
+            <tr>
+                <th>Rank</th>
+                <th>Player</th>
+                <th>Team</th>
+                <th>Runs</th>
+                <th>Balls</th>
+            </tr>
+        `;
+    } else if (category === 'bowler_wickets') {
+        headers = `
+             <tr>
+                <th>Rank</th>
+                <th>Player</th>
+                <th>Team</th>
+                <th>Wickets</th>
+            </tr>
+        `;
+    } else if (category === 'batsman_innings_highs') {
+        headers = `
+             <tr>
+                <th>Rank</th>
+                <th>Player</th>
+                <th>Team</th>
+                <th>Opposition</th>
+                <th>Venue</th>
+                <th>Runs</th>
+                <th>Balls</th>
+                <th>Date</th>
+            </tr>
+        `;
+    } else if (category === 'bowler_innings_wickets') {
+        headers = `
+             <tr>
+                <th>Rank</th>
+                <th>Player</th>
+                <th>Team</th>
+                <th>Opposition</th>
+                <th>Venue</th>
+                <th>Wickets</th>
+                <th>Runs Conceded</th>
+                <th>Date</th>
+            </tr>
+        `;
+    }
+    thead.innerHTML = headers;
+
+    // Get Data
+    if (!statsData.phase_stats || !statsData.phase_stats[category] || !statsData.phase_stats[category][phase]) {
+        tbody.innerHTML = '<tr><td colspan="5">Data not available (Run data_processor.py to update).</td></tr>';
+        return;
+    }
+
+    let data = [...statsData.phase_stats[category][phase]]; // Copy array to avoid mutating original
+
+    // Apply Dropdown Filters
+    if (countryFilter && countryFilter !== 'All') {
+        data = data.filter(item => item.team === countryFilter);
+    }
+    if (oppositionFilter && oppositionFilter !== 'All') {
+        // Opposition not present in career stats, safe to check
+        data = data.filter(item => item.opposition && item.opposition === oppositionFilter);
+    }
+
+    if (searchQuery) {
+        if (category === 'team_innings_highs') {
+            data = data.filter(item => item.team.toLowerCase().includes(searchQuery) || item.opposition.toLowerCase().includes(searchQuery));
+        } else if (category === 'batsman_innings_highs' || category === 'bowler_innings_wickets') {
+            data = data.filter(item => item.name.toLowerCase().includes(searchQuery) || item.team.toLowerCase().includes(searchQuery) || item.opposition.toLowerCase().includes(searchQuery));
+        } else {
+            data = data.filter(item => item.name.toLowerCase().includes(searchQuery));
+        }
+    }
+
+    // Sort Data
+    data.sort((a, b) => {
+        let valA, valB;
+        if (category === 'team_innings_highs' || category === 'batsman_innings_highs') {
+            valA = a.runs;
+            valB = b.runs;
+        } else if (category === 'bowler_innings_wickets') {
+            valA = a.value;
+            valB = b.value;
+        } else if (category === 'batsman_runs' || category === 'bowler_wickets') {
+            valA = a.value;
+            valB = b.value;
+        }
+
+        if (sortOrder === 'asc') {
+            return valA - valB;
+        } else {
+            return valB - valA;
+        }
+    });
+
+
+    if (data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5">No records found.</td></tr>';
+        return;
+    }
+
+    data.slice(0, 50).forEach((item, index) => {
+        let row = '';
+        if (category === 'team_innings_highs') {
+            row = `
+                <tr>
+                    <td>${index + 1}</td>
+                    <td>${item.team}</td>
+                    <td>${item.opposition}</td>
+                    <td>${item.venue ? item.venue : 'N/A'}</td>
+                    <td>${item.runs}</td>
+                    <td>${item.date}</td>
+                </tr>
+            `;
+        } else if (category === 'batsman_runs') {
+            row = `
+                <tr>
+                    <td>${index + 1}</td>
+                    <td>${item.name}</td>
+                    <td>${item.team}</td>
+                    <td>${item.value}</td>
+                    <td>${item.balls}</td>
+                </tr>
+            `;
+        } else if (category === 'bowler_wickets') {
+            row = `
+                <tr>
+                    <td>${index + 1}</td>
+                    <td>${item.name}</td>
+                    <td>${item.team}</td>
+                    <td>${item.value}</td>
+                </tr>
+            `;
+        } else if (category === 'batsman_innings_highs') {
+            row = `
+                <tr>
+                    <td>${index + 1}</td>
+                    <td>${item.name}</td>
+                    <td>${item.team}</td>
+                    <td>${item.opposition}</td>
+                    <td>${item.venue ? item.venue : 'N/A'}</td>
+                    <td>${item.runs}</td>
+                    <td>${item.balls}</td>
+                    <td>${item.date}</td>
+                </tr>
+            `;
+        } else if (category === 'bowler_innings_wickets') {
+            row = `
+                <tr>
+                    <td>${index + 1}</td>
+                    <td>${item.name}</td>
+                    <td>${item.team}</td>
+                    <td>${item.opposition}</td>
+                    <td>${item.venue ? item.venue : 'N/A'}</td>
+                    <td>${item.value}</td>
+                    <td>${item.runs}</td>
+                    <td>${item.date}</td>
+                </tr>
+            `;
+        }
         tbody.innerHTML += row;
     });
 }

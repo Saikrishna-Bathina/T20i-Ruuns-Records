@@ -21,6 +21,7 @@
             <button class="tab-btn" onclick="switchTab('highestScore')">Highest Scores</button>
             <button class="tab-btn" onclick="switchTab('fastest')">Fastest to Milestones</button>
             <button class="tab-btn" onclick="switchTab('fastestInnings')">Fastest Innings</button>
+            <button class="tab-btn" onclick="switchTab('phaseStats')">Phase Stats</button>
         </nav>
 
         <main id="mostRun" class="tab-content active">
@@ -190,6 +191,60 @@
                             <th>Date</th>
                             <th>Final Score</th>
                         </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Data will be populated here -->
+                    </tbody>
+                </table>
+            </div>
+        </main>
+
+        <main id="phaseStats" class="tab-content">
+            <h2>Phase-wise Statistics</h2>
+
+            <div class="controls">
+                <label for="phaseSelect">Phase:</label>
+                <select id="phaseSelect" onchange="updatePhaseStatsTable()">
+                    <option value="Powerplay">Powerplay (1-6)</option>
+                    <option value="Middle">Middle Overs (7-15)</option>
+                    <option value="Death">Death Overs (16-20)</option>
+                </select>
+
+                <label for="phaseCategorySelect">Category:</label>
+                <select id="phaseCategorySelect" onchange="updatePhaseStatsTable()">
+                    <option value="team_innings_highs">Team Highest Score (Innings)</option>
+                    <option value="batsman_runs">Batsman Most Runs (Career)</option>
+                    <option value="bowler_wickets">Bowler Most Wickets (Career)</option>
+                    <option value="batsman_innings_highs">Batsman Highest Score (Innings)</option>
+                    <option value="bowler_innings_wickets">Bowler Best Bowling (Innings)</option>
+                </select>
+
+                <label for="phaseCountrySelect">Filter by Team:</label>
+                <select id="phaseCountrySelect" onchange="updatePhaseStatsTable()">
+                    <option value="All">All Teams</option>
+                    <!-- Populated by JS -->
+                </select>
+
+                <label for="phaseOppositionSelect">Filter by Opposition:</label>
+                <select id="phaseOppositionSelect" onchange="updatePhaseStatsTable()">
+                    <option value="All">All Oppositions</option>
+                    <!-- Populated by JS -->
+                </select>
+
+                <label for="sortOrder">Sort Order:</label>
+                <select id="sortOrder" onchange="updatePhaseStatsTable()">
+                    <option value="desc">Highest First</option>
+                    <option value="asc">Lowest First</option>
+                </select>
+
+                <label for="phaseSearch">Search:</label>
+                <input type="text" id="phaseSearch" placeholder="Search..." onkeyup="updatePhaseStatsTable()">
+            </div>
+
+            <div class="table-wrapper">
+                <table id="phaseStatsTable">
+                    <thead>
+                        <!-- Headers will be dynamic -->
                     </thead>
                     <tbody>
                         <!-- Data will be populated here -->
