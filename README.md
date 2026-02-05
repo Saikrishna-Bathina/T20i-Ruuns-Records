@@ -3,12 +3,14 @@
 A comprehensive dashboard for visualizing Men's T20 International cricket statistics, powered by Cricsheet data.
 
 ## Features
-- **Most Runs**: Top 50 run-scorers in T20i history.
-- **Highest Scores**: Top 10 individual scores in an innings (with Not Out indicators).
-- **Fastest to Milestones**:
+- **Most Runs**: Top run-scorers in T20i history, with filtering by **Batting Position** (Opener, 3, 4, etc.).
+- **Highest Scores**: Top individual scores in an innings (with Not Out indicators).
+- **Fastest to Milestones (Career)**:
     - Fastest to 1000, 2000, 3000, 4000, and 5000 runs.
-    - toggle between **Balls Faced** and **Innings Played**.
-- **Country Filter**: Filter milestone records by team.
+    - Toggle between **Balls Faced** and **Innings Played**.
+- **Fastest Innings Milestones**:
+    - Fastest 50, 100, 150, and 200 runs in a single innings.
+    - Advanced filtering by **Country**, **Opposition**, and **Batting Position**.
 
 ## How it Works
 1.  **Data Source**: The project downloads raw ball-by-ball data from [Cricsheet](https://cricsheet.org/).
