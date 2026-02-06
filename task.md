@@ -1,0 +1,8 @@
+- [ ] Check `_info.csv` structure for result/outcome fields <!-- id: 0 -->
+- [ ] Modify `data_processor.py` to: <!-- id: 1 -->
+    - [ ] Read `_info.csv` for each match to get match result <!-- id: 2 -->
+    - [ ] Calculate balls bowled in each phase for team innings <!-- id: 3 -->
+    - [ ] Include balls and result status in the `team_innings_highs` data <!-- id: 4 -->
+- [ ] Modify `app.js` to: <!-- id: 5 -->
+    - [ ] Display "Balls" in the Team Phase Stats table <!-- id: 6 -->
+    - [ ] Show an indicator (e.g., "N/R") for abandoned matches <!-- id: 7 -->

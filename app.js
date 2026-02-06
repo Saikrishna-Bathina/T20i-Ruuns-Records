@@ -312,6 +312,7 @@ function updatePhaseStatsTable() {
                 <th>Opposition</th>
                 <th>Venue</th>
                 <th>Score</th>
+                <th>Balls</th>
                 <th>Date</th>
             </tr>
         `;
@@ -420,13 +421,19 @@ function updatePhaseStatsTable() {
     data.slice(0, 50).forEach((item, index) => {
         let row = '';
         if (category === 'team_innings_highs') {
+            let scoreDisplay = `${item.runs}/${item.wickets !== undefined ? item.wickets : 0}`;
+            if (item.result === "No Result" || item.result === "Abandoned") {
+                scoreDisplay += ` <span style="color: #ffcc00; font-size: 0.8em;">(N/R)</span>`;
+            }
+
             row = `
                 <tr>
                     <td>${index + 1}</td>
                     <td>${item.team}</td>
                     <td>${item.opposition}</td>
                     <td>${item.venue ? item.venue : 'N/A'}</td>
-                    <td>${item.runs}/${item.wickets !== undefined ? item.wickets : 0}</td>
+                    <td>${scoreDisplay}</td>
+                    <td>${item.balls !== undefined ? item.balls : '-'}</td>
                     <td>${item.date}</td>
                 </tr>
             `;

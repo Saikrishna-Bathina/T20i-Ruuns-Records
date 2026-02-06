@@ -48,6 +48,44 @@ def parse_date(date_str):
     except ValueError:
         return datetime.datetime.min
 
+def get_match_outcomes(extract_dir):
+    outcomes = {}
+    print("Reading match info files...")
+    info_files = [f for f in os.listdir(extract_dir) if f.endswith('_info.csv')]
+    
+    for f_name in info_files:
+        match_id = f_name.replace('_info.csv', '')
+        path = os.path.join(extract_dir, f_name)
+        result = "Normal"
+        is_abandoned = False
+        
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    parts = line.strip().split(',')
+                    if len(parts) >= 3 and parts[0] == 'info':
+                        # Check for outcome/result keys
+                        key = parts[1].lower()
+                        val = parts[2].lower()
+                        
+                        if key == 'outcome' and val == 'no result':
+                            result = "No Result"
+                            is_abandoned = True
+                        elif key == 'result' and val == 'no result':
+                            result = "No Result"
+                            is_abandoned = True
+                        elif key == 'outcome' and val == 'tie':
+                            result = "Tie"
+                            
+                        # Sometimes winner is missing in abandoned matches, 
+                        # but we rely on explicit 'no result' key.
+        except Exception:
+            pass
+            
+        outcomes[match_id] = result
+        
+    return outcomes
+
 def process_data():
     if not os.path.exists(EXTRACT_DIR):
         print("Data directory not found.")
@@ -62,6 +100,9 @@ def process_data():
         return
         
     print(f"Found {len(all_files)} match files. Loading data...")
+
+    # Load match outcomes
+    match_outcomes = get_match_outcomes(EXTRACT_DIR)
 
     # Load data into memory
     data_rows = []
@@ -118,9 +159,9 @@ def process_data():
         over = int(ball_val)
         if over < 6:
             return "Powerplay"
-        elif over < 15: # 6 to 14.99
+        elif over < 16: # 6 to 15.99 (Overs 7-16)
             return "Middle"
-        else: # 15+
+        else: # 16+ (Overs 17-20)
             return "Death"
 
     phase_stats = {
@@ -266,9 +307,9 @@ def process_data():
                 "opposition": opposition,
                 "date": date,
                 "venue": row.get('venue'),
-                "Powerplay": {"runs": 0, "wickets": 0},
-                "Middle": {"runs": 0, "wickets": 0},
-                "Death": {"runs": 0, "wickets": 0}
+                "Powerplay": {"runs": 0, "wickets": 0, "balls": 0},
+                "Middle": {"runs": 0, "wickets": 0, "balls": 0},
+                "Death": {"runs": 0, "wickets": 0, "balls": 0}
             }
             
         # Update Team Phase Score
@@ -276,6 +317,8 @@ def process_data():
         team_innings_stats[mi_key][phase]["runs"] += (runs + extras)
         if player_dismissed:
              team_innings_stats[mi_key][phase]["wickets"] += 1
+        if wides == 0 and noballs == 0:
+             team_innings_stats[mi_key][phase]["balls"] += 1
         
         # Add batters if seen for the first time in this innings
         if striker not in batters_seen:
@@ -512,7 +555,9 @@ def process_data():
                     "runs": stats[phase]['runs'],
                     "wickets": stats[phase]['wickets'],
                     "date": stats['date'],
-                    "venue": stats.get('venue', 'N/A')
+                    "venue": stats.get('venue', 'N/A'),
+                    "balls": stats[phase]['balls'],
+                    "result": match_outcomes.get(str(key[0]), "Normal")
                 })
                 
     for phase in phases:
