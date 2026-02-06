@@ -16,7 +16,13 @@ function initDashboard() {
     populateCountryDropdown();
     updateFastestTable();
     updateFastestInningsTable();
+    updateFastestTable();
+    updateFastestInningsTable();
     updatePhaseStatsTable();
+    updateBowlingMilestonesTable(); // New
+    updateBestBowlingTable();
+    updateMostWicketsTable();
+    updateMostHaulsTable();
 }
 
 function switchTab(tabId) {
@@ -483,6 +489,328 @@ function updatePhaseStatsTable() {
                 </tr>
             `;
         }
+        tbody.innerHTML += row;
+    });
+}
+
+function updateBowlingMilestonesTable() {
+    const milestone = document.getElementById('bowlingMilestoneSelect').value;
+    const type = document.getElementById('bowlingTypeSelect').value;
+    const teamSelect = document.getElementById('bowlingTeamSelect');
+    const teamLabel = document.getElementById('bowlingTeamSelectLabel');
+    const searchInput = document.getElementById('bowlingSearch');
+    const searchQuery = searchInput ? searchInput.value.toLowerCase() : '';
+    const tbody = document.querySelector('#bowlingMilestonesTable tbody');
+    const thead = document.querySelector('#bowlingMilestonesTable thead tr');
+
+    tbody.innerHTML = '';
+
+    // Handle Team Dropdown Visibility
+    if (type === 'for_team' || type === 'vs_team') {
+        teamSelect.style.display = 'inline-block';
+        teamLabel.style.display = 'inline-block';
+        if (type === 'for_team') teamLabel.innerText = "Select Team:";
+        else teamLabel.innerText = "Select Opposition:";
+    } else {
+        teamSelect.style.display = 'none';
+        teamLabel.style.display = 'none';
+    }
+
+    // Dynamic Headers
+    let teamHeader = "Team";
+    if (type === 'for_team') teamHeader = "Team";
+    if (type === 'vs_team') teamHeader = "Opposition";
+
+    thead.innerHTML = `
+        <th>Rank</th>
+        <th>Player</th>
+        <th>${teamHeader}</th>
+        <th>Innings</th>
+        <th>Date</th>
+    `;
+
+    // Fetch Data
+    let data = [];
+    if (!statsData.fastest_wickets) {
+        tbody.innerHTML = '<tr><td colspan="5">Data not loaded.</td></tr>';
+        return;
+    }
+
+    if (type === 'overall') {
+        data = statsData.fastest_wickets.overall[milestone] || [];
+    } else if (type === 'for_team') {
+        const team = teamSelect.value;
+        if (team === 'All') {
+            let all = [];
+            Object.values(statsData.fastest_wickets.for_team).forEach(arr => {
+                if (arr[milestone]) all = all.concat(arr[milestone]);
+            });
+            data = all;
+        } else {
+            data = statsData.fastest_wickets.for_team[team]?.[milestone] || [];
+        }
+    } else if (type === 'vs_team') {
+        const team = teamSelect.value;
+        if (team === 'All') {
+            let all = [];
+            Object.values(statsData.fastest_wickets.vs_team).forEach(arr => {
+                if (arr[milestone]) all = all.concat(arr[milestone]);
+            });
+            data = all;
+        } else {
+            data = statsData.fastest_wickets.vs_team[team]?.[milestone] || [];
+        }
+    }
+
+    // Filter Search
+    if (searchQuery) {
+        data = data.filter(p => p.name.toLowerCase().includes(searchQuery));
+    }
+
+    // Sort (Innings ASC, Date ASC)
+    data.sort((a, b) => {
+        if (a.innings !== b.innings) return a.innings - b.innings;
+        return new Date(a.date) - new Date(b.date);
+    });
+
+    if (data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5">No records found.</td></tr>';
+        return;
+    }
+
+    data.slice(0, 50).forEach((player, index) => {
+        const row = `
+            <tr>
+                <td>${index + 1}</td>
+                <td>${player.name}</td>
+                <td>${player.team}</td>
+                <td>${player.innings}</td>
+                <td>${player.date}</td>
+            </tr>
+        `;
+        tbody.innerHTML += row;
+    });
+
+    // Check if dropdown needs populating
+    if (type !== 'overall' && teamSelect.options.length <= 1) {
+        let keys = [];
+        if (type === 'for_team') keys = Object.keys(statsData.fastest_wickets.for_team).sort();
+        else if (type === 'vs_team') keys = Object.keys(statsData.fastest_wickets.vs_team).sort();
+
+        keys.forEach(t => {
+            const opt = document.createElement('option');
+            opt.value = t;
+            opt.innerText = t;
+            teamSelect.appendChild(opt);
+        });
+    }
+}
+
+// Hook to repopulate dropdown on type change
+document.getElementById('bowlingTypeSelect')?.addEventListener('change', function () {
+    const type = this.value;
+    const teamSelect = document.getElementById('bowlingTeamSelect');
+    teamSelect.innerHTML = '<option value="All">All Teams</option>';
+    updateBowlingMilestonesTable();
+});
+
+
+function updateBestBowlingTable() {
+    const type = document.getElementById('bestBowlingTypeSelect').value;
+    const teamFilter = document.getElementById('bestBowlingTeamSelect').value;
+    const searchInput = document.getElementById('bestBowlingSearch');
+    const searchQuery = searchInput ? searchInput.value.toLowerCase() : '';
+    const tbody = document.querySelector('#bestBowlingTable tbody');
+
+    tbody.innerHTML = '';
+
+    if (!statsData.best_figures) return;
+
+    let data = statsData.best_figures[type] || [];
+
+    if (teamFilter !== 'All') {
+        data = data.filter(p => p.team === teamFilter);
+    }
+
+    if (searchQuery) {
+        data = data.filter(p => p.name.toLowerCase().includes(searchQuery));
+    }
+
+    if (data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8">No records found.</td></tr>';
+        return;
+    }
+
+    data.slice(0, 50).forEach((item, index) => {
+        const row = `
+            <tr>
+                <td>${index + 1}</td>
+                <td>${item.name}</td>
+                <td>${item.wickets}/${item.runs}</td>
+                <td>${item.balls}</td>
+                <td>${item.team}</td>
+                <td>${item.opposition}</td>
+                <td>${item.venue}</td>
+                <td>${item.date}</td>
+            </tr>
+        `;
+        tbody.innerHTML += row;
+    });
+
+    // Lazy Populate Dropdown
+    const sel = document.getElementById('bestBowlingTeamSelect');
+    if (sel && sel.options.length <= 1) {
+        const teams = new Set();
+        ['4_wickets', '5_wickets'].forEach(key => {
+            if (statsData.best_figures[key]) {
+                statsData.best_figures[key].forEach(p => teams.add(p.team));
+            }
+        });
+        [...teams].sort().forEach(t => {
+            const opt = document.createElement('option');
+            opt.value = t;
+            opt.innerText = t;
+            sel.appendChild(opt);
+
+        });
+    }
+}
+
+function updateMostWicketsTable() {
+    const type = document.getElementById('mostWicketsTypeSelect').value;
+    const teamSelect = document.getElementById('mostWicketsTeamSelect');
+    const teamLabel = document.getElementById('mostWicketsTeamSelectLabel');
+    const searchInput = document.getElementById('mostWicketsSearch');
+    const searchQuery = searchInput ? searchInput.value.toLowerCase() : '';
+    const tbody = document.querySelector('#mostWicketsTable tbody');
+
+    tbody.innerHTML = '';
+
+    // Visibility
+    if (type === 'for_team' || type === 'vs_team') {
+        teamSelect.style.display = 'inline-block';
+        teamLabel.style.display = 'inline-block';
+        if (type === 'for_team') teamLabel.innerText = "Select Team:";
+        else teamLabel.innerText = "Select Opposition:";
+    } else {
+        teamSelect.style.display = 'none';
+        teamLabel.style.display = 'none';
+    }
+
+    if (!statsData.most_wickets) return;
+
+    let data = [];
+    if (type === 'overall') {
+        data = statsData.most_wickets.overall || [];
+    } else if (type === 'for_team') {
+        const team = teamSelect.value;
+        if (team === 'All') {
+            // Flatten all lists
+            Object.values(statsData.most_wickets.for_team).forEach(arr => {
+                data = data.concat(arr);
+            });
+        } else {
+            data = statsData.most_wickets.for_team[team] || [];
+        }
+    } else if (type === 'vs_team') {
+        const team = teamSelect.value;
+        if (team === 'All') {
+            Object.values(statsData.most_wickets.vs_team).forEach(arr => {
+                data = data.concat(arr);
+            });
+        } else {
+            data = statsData.most_wickets.vs_team[team] || [];
+        }
+    }
+
+    if (searchQuery) {
+        data = data.filter(p => p.name.toLowerCase().includes(searchQuery));
+    }
+
+    // Sort by Wickets DESC
+    data.sort((a, b) => b.wickets - a.wickets);
+
+    if (data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7">No records found.</td></tr>';
+        return;
+    }
+
+    data.slice(0, 50).forEach((item, index) => {
+        const avg = item.wickets > 0 ? (item.runs / item.wickets).toFixed(2) : '-';
+        const econ = item.balls > 0 ? (item.runs / (item.balls / 6)).toFixed(2) : '-';
+
+        const row = `
+            <tr>
+                <td>${index + 1}</td>
+                <td>${item.name}</td>
+                <td>${item.team}</td>
+                <td>${item.wickets}</td>
+                <td>${item.innings}</td>
+                <td>${avg}</td>
+                <td>${econ}</td>
+            </tr>
+        `;
+        tbody.innerHTML += row;
+    });
+
+    // Helper for dropdown population logic (similar to others)
+    if (type !== 'overall' && teamSelect.options.length <= 1) {
+        let keys = [];
+        if (type === 'for_team') keys = Object.keys(statsData.most_wickets.for_team).sort();
+        else if (type === 'vs_team') keys = Object.keys(statsData.most_wickets.vs_team).sort();
+
+        keys.forEach(t => {
+            const opt = document.createElement('option');
+            opt.value = t;
+            opt.innerText = t;
+            teamSelect.appendChild(opt);
+        });
+    }
+}
+
+// Hook for Most Wickets Dropdown
+document.getElementById('mostWicketsTypeSelect')?.addEventListener('change', function () {
+    const type = this.value;
+    const teamSelect = document.getElementById('mostWicketsTeamSelect');
+    teamSelect.innerHTML = '<option value="All">All Teams</option>';
+    updateMostWicketsTable();
+});
+
+
+function updateMostHaulsTable() {
+    const type = document.getElementById('mostHaulsTypeSelect').value;
+    const searchInput = document.getElementById('mostHaulsSearch');
+    const searchQuery = searchInput ? searchInput.value.toLowerCase() : '';
+    const tbody = document.querySelector('#mostHaulsTable tbody');
+
+    tbody.innerHTML = '';
+
+    if (!statsData.most_hauls) return;
+
+    let data = statsData.most_hauls[type] || [];
+
+    if (searchQuery) {
+        data = data.filter(p => p.name.toLowerCase().includes(searchQuery));
+    }
+
+    // Already sorted by count DESC
+
+    if (data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5">No records found.</td></tr>';
+        return;
+    }
+
+    data.slice(0, 50).forEach((item, index) => {
+        const count = type === '4w' ? item['4w'] : item['5w'];
+        const row = `
+            <tr>
+                <td>${index + 1}</td>
+                <td>${item.name}</td>
+                <td>${item.team}</td>
+                <td>${count}</td>
+                <td>${item.innings}</td>
+            </tr>
+        `;
         tbody.innerHTML += row;
     });
 }

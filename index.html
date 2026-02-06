@@ -21,6 +21,10 @@
             <button class="tab-btn" onclick="switchTab('highestScore')">Highest Scores</button>
             <button class="tab-btn" onclick="switchTab('fastest')">Fastest to Milestones</button>
             <button class="tab-btn" onclick="switchTab('fastestInnings')">Fastest Innings</button>
+            <button class="tab-btn" onclick="switchTab('bowlingMilestones')">Bowling Milestones</button>
+            <button class="tab-btn" onclick="switchTab('bestBowling')">Best Bowling</button>
+            <button class="tab-btn" onclick="switchTab('mostWickets')">Most Wickets</button>
+            <button class="tab-btn" onclick="switchTab('mostHauls')">Most Hauls</button>
             <button class="tab-btn" onclick="switchTab('phaseStats')">Phase Stats</button>
         </nav>
 
@@ -190,6 +194,165 @@
                             <th>Balls</th>
                             <th>Date</th>
                             <th>Final Score</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Data will be populated here -->
+                    </tbody>
+                </table>
+        </main>
+
+        <main id="bowlingMilestones" class="tab-content">
+            <h2>Fastest to Bowling Milestones (Innings)</h2>
+            <div class="controls">
+                <label for="bowlingMilestoneSelect">Milestone:</label>
+                <select id="bowlingMilestoneSelect" onchange="updateBowlingMilestonesTable()">
+                    <option value="50">50 Wickets</option>
+                    <option value="100">100 Wickets</option>
+                    <option value="150">150 Wickets</option>
+                    <option value="200">200 Wickets</option>
+                    <option value="250">250 Wickets</option>
+                    <option value="300">300 Wickets</option>
+                </select>
+
+                <label for="bowlingTypeSelect">Check Type:</label>
+                <select id="bowlingTypeSelect" onchange="updateBowlingMilestonesTable()">
+                    <option value="overall">Overall</option>
+                    <option value="for_team">For Specific Team</option>
+                    <option value="vs_team">Against Specific Team</option>
+                </select>
+
+                <label for="bowlingTeamSelect" id="bowlingTeamSelectLabel" style="display:none;">Select Team:</label>
+                <select id="bowlingTeamSelect" onchange="updateBowlingMilestonesTable()" style="display:none;">
+                    <option value="All">All Teams</option> <!-- Populated dynamically -->
+                </select>
+
+                <label for="bowlingSearch">Search Player:</label>
+                <input type="text" id="bowlingSearch" placeholder="Enter name..."
+                    onkeyup="updateBowlingMilestonesTable()">
+            </div>
+
+            <div class="table-wrapper">
+                <table id="bowlingMilestonesTable">
+                    <thead>
+                        <tr>
+                            <th>Rank</th>
+                            <th>Player</th>
+                            <th>Team</th> <!-- Show Team or Opposition depending on context -->
+                            <th>Innings</th>
+                            <th>Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Data will be populated here -->
+                    </tbody>
+                </table>
+            </div>
+        </main>
+
+        <main id="bestBowling" class="tab-content">
+            <h2>Best Bowling Figures (Innings)</h2>
+            <div class="controls">
+                <label for="bestBowlingTypeSelect">Type:</label>
+                <select id="bestBowlingTypeSelect" onchange="updateBestBowlingTable()">
+                    <option value="5_wickets">5 Wicket Hauls</option>
+                    <option value="4_wickets">4 Wicket Hauls</option>
+                </select>
+
+                <label for="bestBowlingTeamSelect">Filter by Team:</label>
+                <select id="bestBowlingTeamSelect" onchange="updateBestBowlingTable()">
+                    <option value="All">All Teams</option>
+                </select>
+
+                <label for="bestBowlingSearch">Search Player:</label>
+                <input type="text" id="bestBowlingSearch" placeholder="Enter name..."
+                    onkeyup="updateBestBowlingTable()">
+            </div>
+
+            <div class="table-wrapper">
+                <table id="bestBowlingTable">
+                    <thead>
+                        <tr>
+                            <th>Rank</th>
+                            <th>Player</th>
+                            <th>Figures</th> <!-- Wickets/Runs -->
+                            <th>Balls</th>
+                            <th>Team</th>
+                            <th>Opposition</th>
+                            <th>Venue</th>
+                            <th>Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Data will be populated here -->
+                    </tbody>
+                </table>
+            </div>
+        </main>
+
+        <main id="mostWickets" class="tab-content">
+            <h2>Most Wickets (Career/Aggregate)</h2>
+            <div class="controls">
+                <label for="mostWicketsTypeSelect">Type:</label>
+                <select id="mostWicketsTypeSelect" onchange="updateMostWicketsTable()">
+                    <option value="overall">Overall</option>
+                    <option value="for_team">For Specific Team</option>
+                    <option value="vs_team">Against Specific Team</option>
+                </select>
+
+                <label for="mostWicketsTeamSelect" id="mostWicketsTeamSelectLabel" style="display:none;">Select
+                    Team:</label>
+                <select id="mostWicketsTeamSelect" onchange="updateMostWicketsTable()" style="display:none;">
+                    <option value="All">All Teams</option>
+                </select>
+
+                <label for="mostWicketsSearch">Search Player:</label>
+                <input type="text" id="mostWicketsSearch" placeholder="Enter name..."
+                    onkeyup="updateMostWicketsTable()">
+            </div>
+
+            <div class="table-wrapper">
+                <table id="mostWicketsTable">
+                    <thead>
+                        <tr>
+                            <th>Rank</th>
+                            <th>Player</th>
+                            <th>Team</th>
+                            <th>Wickets</th>
+                            <th>Innings</th>
+                            <th>Avg</th>
+                            <th>Econ</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Data will be populated here -->
+                    </tbody>
+                </table>
+            </div>
+        </main>
+
+        <main id="mostHauls" class="tab-content">
+            <h2>Most 4+ and 5+ Wicket Hauls</h2>
+            <div class="controls">
+                <label for="mostHaulsTypeSelect">Type:</label>
+                <select id="mostHaulsTypeSelect" onchange="updateMostHaulsTable()">
+                    <option value="5w">5-Wicket Hauls</option>
+                    <option value="4w">4-Wicket Hauls</option>
+                </select>
+
+                <label for="mostHaulsSearch">Search Player:</label>
+                <input type="text" id="mostHaulsSearch" placeholder="Enter name..." onkeyup="updateMostHaulsTable()">
+            </div>
+
+            <div class="table-wrapper">
+                <table id="mostHaulsTable">
+                    <thead>
+                        <tr>
+                            <th>Rank</th>
+                            <th>Player</th>
+                            <th>Team</th>
+                            <th>Count</th>
+                            <th>Innings</th>
                         </tr>
                     </thead>
                     <tbody>
