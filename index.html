@@ -21,6 +21,7 @@
             <button class="tab-btn" onclick="switchTab('highestScore')">Highest Scores</button>
             <button class="tab-btn" onclick="switchTab('fastest')">Fastest to Milestones</button>
             <button class="tab-btn" onclick="switchTab('fastestInnings')">Fastest Innings</button>
+            <button class="tab-btn" onclick="switchTab('inningsMilestones')">Innings Milestones</button>
             <button class="tab-btn" onclick="switchTab('bowlingMilestones')">Bowling Milestones</button>
             <button class="tab-btn" onclick="switchTab('bestBowling')">Best Bowling</button>
             <button class="tab-btn" onclick="switchTab('mostWickets')">Most Wickets</button>
@@ -202,6 +203,55 @@
                 </table>
         </main>
 
+        <main id="inningsMilestones" class="tab-content">
+            <h2>Innings Milestones (50/100)</h2>
+            <div class="controls">
+                <label for="imMetricSelect">Metric:</label>
+                <select id="imMetricSelect" onchange="updateInningsMilestonesTable()">
+                    <option value="fastest">Fastest</option>
+                    <option value="slowest">Slowest</option>
+                </select>
+
+                <label for="imMilestoneSelect">Milestone:</label>
+                <select id="imMilestoneSelect" onchange="updateInningsMilestonesTable()">
+                    <option value="50">50 Runs</option>
+                    <option value="100">100 Runs</option>
+                </select>
+
+                <label for="imGroupSelect">Group By:</label>
+                <select id="imGroupSelect" onchange="updateInningsMilestonesTable()">
+                    <option value="overall">Overall</option>
+                    <option value="team">For Team</option>
+                    <option value="vs">Vs Opposition</option>
+                </select>
+
+                <label for="imTeamSelect" id="imTeamSelectLabel" style="display:none;">Select Team:</label>
+                <select id="imTeamSelect" onchange="updateInningsMilestonesTable()" style="display:none;">
+                    <!-- Populated JS -->
+                </select>
+
+                <label for="imSearch">Search Player:</label>
+                <input type="text" id="imSearch" placeholder="Enter name..." onkeyup="updateInningsMilestonesTable()">
+            </div>
+
+            <div class="table-wrapper">
+                <table id="inningsMilestonesTable">
+                    <thead>
+                        <tr>
+                            <th>Rank</th>
+                            <th>Player</th>
+                            <th>Team</th>
+                            <th>Opposition</th>
+                            <th>Balls</th>
+                            <th>Runs</th>
+                            <th>Date</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </main>
+
         <main id="bowlingMilestones" class="tab-content">
             <h2>Fastest to Bowling Milestones (Innings)</h2>
             <div class="controls">
@@ -220,10 +270,17 @@
                     <option value="overall">Overall</option>
                     <option value="for_team">For Specific Team</option>
                     <option value="vs_team">Against Specific Team</option>
+                    <option value="team_vs">Team vs Opposition</option>
                 </select>
 
                 <label for="bowlingTeamSelect" id="bowlingTeamSelectLabel" style="display:none;">Select Team:</label>
                 <select id="bowlingTeamSelect" onchange="updateBowlingMilestonesTable()" style="display:none;">
+                    <option value="All">All Teams</option> <!-- Populated dynamically -->
+                </select>
+
+                <label for="bowlingOppSelect" id="bowlingOppSelectLabel" style="display:none;">Select
+                    Opposition:</label>
+                <select id="bowlingOppSelect" onchange="updateBowlingMilestonesTable()" style="display:none;">
                     <option value="All">All Teams</option> <!-- Populated dynamically -->
                 </select>
 
@@ -298,11 +355,18 @@
                     <option value="overall">Overall</option>
                     <option value="for_team">For Specific Team</option>
                     <option value="vs_team">Against Specific Team</option>
+                    <option value="team_vs">Team vs Opposition</option>
                 </select>
 
                 <label for="mostWicketsTeamSelect" id="mostWicketsTeamSelectLabel" style="display:none;">Select
                     Team:</label>
                 <select id="mostWicketsTeamSelect" onchange="updateMostWicketsTable()" style="display:none;">
+                    <option value="All">All Teams</option>
+                </select>
+
+                <label for="mostWicketsOppSelect" id="mostWicketsOppSelectLabel" style="display:none;">Select
+                    Opposition:</label>
+                <select id="mostWicketsOppSelect" onchange="updateMostWicketsTable()" style="display:none;">
                     <option value="All">All Teams</option>
                 </select>
 

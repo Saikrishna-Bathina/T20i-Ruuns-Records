@@ -287,6 +287,9 @@ def process_data():
     
     # Split by Opposition (Fastest vs Team Y)
     bowler_vs_stats = {} # Opposition -> Bowler -> Stats
+
+    # Split by Team vs Opposition (Fastest for Team X vs Team Y)
+    bowler_team_vs_stats = {} # Team -> Opposition -> Bowler -> Stats
     
     # Best Figures Tracking
     # List of {name, team, opposition, wickets, runs, balls, date, venue}
@@ -394,6 +397,27 @@ def process_data():
                     if wm not in bowler_vs_stats[b_opp][b_name]["milestones"]:
                         bowler_vs_stats[b_opp][b_name]["milestones"][wm] = {
                             "innings": bowler_vs_stats[b_opp][b_name]["innings"],
+                            "date": date,
+                            "match_id": mid
+                        }
+
+            # Team Vs Opposition (New)
+            # Structure: bowler_team_vs_stats[Team][Opposition][Player]
+            if b_team not in bowler_team_vs_stats: bowler_team_vs_stats[b_team] = {}
+            if b_opp not in bowler_team_vs_stats[b_team]: bowler_team_vs_stats[b_team][b_opp] = {}
+            
+            init_bowler_stats(bowler_team_vs_stats[b_team][b_opp], b_name)
+            if is_new_match: bowler_team_vs_stats[b_team][b_opp][b_name]["innings"] += 1
+            
+            start_w_tv = bowler_team_vs_stats[b_team][b_opp][b_name]["wickets"]
+            bowler_team_vs_stats[b_team][b_opp][b_name]["wickets"] += wkt
+            end_w_tv = bowler_team_vs_stats[b_team][b_opp][b_name]["wickets"]
+             
+            for wm in wicket_milestones:
+                if start_w_tv < wm and end_w_tv >= wm:
+                    if wm not in bowler_team_vs_stats[b_team][b_opp][b_name]["milestones"]:
+                        bowler_team_vs_stats[b_team][b_opp][b_name]["milestones"][wm] = {
+                            "innings": bowler_team_vs_stats[b_team][b_opp][b_name]["innings"],
                             "date": date,
                             "match_id": mid
                         }
@@ -601,6 +625,14 @@ def process_data():
     for opp, b_stats in bowler_vs_stats.items():
         fastest_wickets_vs[opp] = format_milestone_list(b_stats)
 
+    # Team Vs Opposition (Dict of Dicts of Dicts)
+    # Result: Team -> Opposition -> { 50: [...], 100: [...] }
+    fastest_wickets_team_vs = {}
+    for team, opp_dict in bowler_team_vs_stats.items():
+        fastest_wickets_team_vs[team] = {}
+        for opp, b_stats in opp_dict.items():
+             fastest_wickets_team_vs[team][opp] = format_milestone_list(b_stats)
+
 
     # 3. Most Wickets & Haul Counts (New Requirement)
     # Re-process bowler_innings_stats to aggregate these since career stats didn't track hauls fully matched to innings counts logic (though it could have).
@@ -690,6 +722,23 @@ def process_data():
     for t in temp_vs_lists:
         temp_vs_lists[t].sort(key=lambda x: x["wickets"], reverse=True)
     most_wickets_vs = temp_vs_lists
+
+    # Team Vs Opposition (Most Wickets)
+    # Structure: Team -> Opposition -> List
+    most_wickets_team_vs = {}
+    agg_team_vs = aggregate_bowling_records(lambda x: (x["team"], x["opposition"], x["name"]))
+    
+    temp_team_vs_lists = {}
+    for k, rec in agg_team_vs.items():
+        team_name, opp_name, p_name = k
+        if team_name not in temp_team_vs_lists: temp_team_vs_lists[team_name] = {}
+        if opp_name not in temp_team_vs_lists[team_name]: temp_team_vs_lists[team_name][opp_name] = []
+        temp_team_vs_lists[team_name][opp_name].append(rec)
+        
+    for t in temp_team_vs_lists:
+        for o in temp_team_vs_lists[t]:
+             temp_team_vs_lists[t][o].sort(key=lambda x: x["wickets"], reverse=True)
+    most_wickets_team_vs = temp_team_vs_lists
     
     # Most 4w/5w Hauls (Overall List)
     # Simply sort the overall list by hauls
@@ -716,9 +765,100 @@ def process_data():
         "best_figures": {
             "4_wickets": best_figures_4,
             "5_wickets": best_figures_5
-        }
-    }    
-    # NEW: Calculate Most Runs by Position
+        },
+        "innings_milestones": {} # Placeholder, populated below
+    }
+
+    # --- NEW: INNINGS MILESTONES (Fastest/Slowest 50/100) ---
+    print("Processing innings milestones...")
+    
+    # We need to extract milestones from 'innings_stats'
+    # entry structure in innings_stats: 
+    # {name, team, opposition, runs, balls, date, milestones: {50: balls, 100: balls, ...}}
+    
+    # Containers
+    milestone_records = {
+        50: [],
+        100: []
+    }
+    
+    for key, stats in innings_stats.items():
+        for m_val, balls_faced in stats['milestones'].items():
+            if m_val in milestone_records:
+                milestone_records[m_val].append({
+                    "name": stats["name"],
+                    "team": stats["team"],
+                    "opposition": stats["opposition"],
+                    "venue": stats["venue"],
+                    "date": stats["date"],
+                    "balls": balls_faced,
+                    "runs": stats["runs"], # Final runs in that innings
+                    "is_out": stats["is_out"]
+                })
+
+    # Helper to sort and group
+    def process_milestone_group(records):
+        # Sort Fastest: Balls ASC, Date ASC
+        fastest = sorted(records, key=lambda x: (x["balls"], parse_date(x["date"]).timestamp()))
+        # Sort Slowest: Balls DESC, Date ASC
+        slowest = sorted(records, key=lambda x: (-x["balls"], parse_date(x["date"]).timestamp()))
+        return {"fastest": fastest, "slowest": slowest}
+
+    # 1. Overall
+    im_overall = {}
+    for m in [50, 100]:
+        im_overall[str(m)] = process_milestone_group(milestone_records[m])
+
+    # 2. By Team
+    im_team = {} # { "India": { "50": {fastest, slowest}, ... } }
+    # Group records by team first
+    team_map_50 = {} # Team -> List
+    team_map_100 = {}
+    
+    for rec in milestone_records[50]:
+        t = rec["team"]
+        if t not in team_map_50: team_map_50[t] = []
+        team_map_50[t].append(rec)
+        
+    for rec in milestone_records[100]:
+        t = rec["team"]
+        if t not in team_map_100: team_map_100[t] = []
+        team_map_100[t].append(rec)
+        
+    # Process attributes for all teams found in either map
+    all_teams = set(list(team_map_50.keys()) + list(team_map_100.keys()))
+    for t in all_teams:
+        im_team[t] = {}
+        im_team[t]["50"] = process_milestone_group(team_map_50.get(t, []))
+        im_team[t]["100"] = process_milestone_group(team_map_100.get(t, []))
+
+    # 3. Vs Opposition
+    im_vs = {} # { "Australia": { "50": {fastest, slowest}, ... } }
+    vs_map_50 = {}
+    vs_map_100 = {}
+    
+    for rec in milestone_records[50]:
+        o = rec["opposition"]
+        if o not in vs_map_50: vs_map_50[o] = []
+        vs_map_50[o].append(rec)
+        
+    for rec in milestone_records[100]:
+        o = rec["opposition"]
+        if o not in vs_map_100: vs_map_100[o] = []
+        vs_map_100[o].append(rec)
+        
+    all_opps = set(list(vs_map_50.keys()) + list(vs_map_100.keys()))
+    for o in all_opps:
+        im_vs[o] = {}
+        im_vs[o]["50"] = process_milestone_group(vs_map_50.get(o, []))
+        im_vs[o]["100"] = process_milestone_group(vs_map_100.get(o, []))
+
+    # Assign to output
+    output_data["innings_milestones"] = {
+        "overall": im_overall,
+        "team": im_team,
+        "vs": im_vs
+    }
     # Key: Position -> { PlayerName -> {runs, balls, innings} }
     position_stats = {} 
     
@@ -955,7 +1095,8 @@ def process_data():
         "fastest_wickets": {
             "overall": fastest_wickets_overall,
             "for_team": fastest_wickets_team,
-            "vs_team": fastest_wickets_vs
+            "vs_team": fastest_wickets_vs,
+            "team_vs": fastest_wickets_team_vs
         },
         "best_figures": {
             "4_wickets": best_figures_4,
@@ -964,12 +1105,14 @@ def process_data():
         "most_wickets": {
              "overall": most_wickets_overall,
              "for_team": most_wickets_team,
-             "vs_team": most_wickets_vs
+             "vs_team": most_wickets_vs,
+             "team_vs": most_wickets_team_vs
         },
         "most_hauls": {
              "4w": most_4w_hauls,
              "5w": most_5w_hauls
-        }
+        },
+        "innings_milestones": output_data["innings_milestones"]
     }
     
     OUTPUT_FILE = "data.js"

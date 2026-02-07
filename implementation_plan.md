@@ -1,68 +1,71 @@
-# Implementation Plan: Advanced Bowling Statistics
+# Implementation Plan - Fastest/Slowest Innings Milestones
 
-## Goal
-Add detailed bowling statistics to the platform:
-1.  **Fastest to Wicket Milestones (50, 100, 150, 200)**: Ranked by *innings played*.
-    *   **Categories**: Overall, For Specific Team, Against Specific Team.
-2.  **Best Bowling Figures (Speed)**: Fastest 4-Wicket and 5-Wicket hauls in an innings.
-    *   **Ranking**: Fewest Balls -> Fewest Runs -> Date (Most Recent).
+## Goal Description
+Implement "Fastest" and "Slowest" 50 and 100 run milestones for an innings.
+Support filtering by **Team** and **Vs Team (Opposition)** as requested.
+*Note: Captaincy filters cannot be implemented due to missing data in the source files.*
 
-> [!NOTE]
-> Captaincy data is unavailable in the source CSVs, so "Fastest milestones as Captain" cannot be implemented at this time.
+## User Review Required
+> [!WARNING]
+> Captaincy data is not available in the provided Cricsheet dataset. The "By Captain" filter will be omitted.
 
 ## Proposed Changes
 
-### Backend (`data_processor.py`)
+### Backend - `data_processor.py`
+#### [MODIFY] [data_processor.py](file:///c:/Users/Sai Krishna/OneDrive/Desktop/T20i Runs Stats/data_processor.py)
+- **Logic**:
+    - Iterate through `innings_stats` to extract batting milestones (50, 100).
+    - Data Structure: `innings_stats` already contains `milestones` dict `{50: balls, 100: balls}`.
+    - Create aggregation buckets:
+        - `Overall`: List of all milestones.
+        - `By Team`: Dict `{ "India": [ ... ], ... }`
+        - `Vs Team`: Dict `{ "Australia": [ ... ], ... }`
+    - For each bucket, create Sorted Lists:
+        - `Fastest`: Sort by Balls ASC.
+        - `Slowest`: Sort by Balls DESC.
+    - Export new structure in `data.json`:
+      ```json
+      "innings_milestones": {
+          "overall": { "fastest": {}, "slowest": {} },
+          "team": { "fastest": {}, "slowest": {} },
+          "vs": { "fastest": {}, "slowest": {} }
+      }
+      ```
+      (Where inner dicts are keyed by milestone value "50", "100")
 
-#### [MODIFY] [data_processor.py](file:///c:/Users/Sai%20Krishna/OneDrive/Desktop/T20i%20Runs%20Stats/data_processor.py)
+### Backend - `data_processor.py`
+#### [MODIFY] [data_processor.py](file:///c:/Users/Sai Krishna/OneDrive/Desktop/T20i Runs Stats/data_processor.py)
+- **Fastest Wickets**:
+    - Add `bowler_team_vs_stats` dict to track career stats per (Team, Opposition) pair.
+    - Update `update_bowler_career` to populate this new dict.
+    - Export `fastest_wickets_team_vs` structure: `Team -> Opposition -> Milestone -> List`.
+- **Most Wickets**:
+    - Add `agg_team_vs` aggregation using key `(team, opposition, name)`.
+    - Export `most_wickets_team_vs` structure: `Team -> Opposition -> List`.
 
-**1. Track Cumulative Wickets & Innings**
-*   Create a new tracking structure `bowler_career_stats`:
-    *   Key: `bowler_name`
-    *   Value:
-        *   `innings`: int (Count of innings bowled)
-        *   `wickets`: int (Total wickets)
-        *   `milestones_reached`: dict (Make sure we only record the FIRST time they cross 50, 100, etc.)
-            *   Key: milestone (50, 100) -> Value: {innings: X, match_id: Y, date: Z}
-*   **Team/Opposition Splits**:
-    *   We also need to track `bowler_team_stats` (For Team) and `bowler_vs_stats` (Against Team) with similar structure to handle "Fastest 50 wickets for India" or "Fastest 50 wickets vs Australia".
+### Frontend - `index.html` & `app.js`
+#### [MODIFY] [index.html](file:///c:/Users/Sai Krishna/OneDrive/Desktop/T20i Runs Stats/index.html)
+- Update "Most Wickets" and "Bowling Milestones" controls.
+- Add "Team vs Opposition" option to Type select.
+- Ensure both "Select Team" and "Select Opposition" dropdowns are available and toggleable.
 
-**2. Track Fastest 4/5 Wicket Hauls**
-*   In the existing `bowler_innings_stats` (or a sidebar calculation during the main loop), check:
-    *   If `wickets >= 4`:
-        *   Store entry: `{name, team, opposition, venue, date, wickets, runs_conceded, balls_bowled}`.
-*   After processing all data, verify sorting:
-    *   Sort by: `wickets` (DESC) [implicit for 5 vs 4 lists], `balls` (ASC), `runs` (ASC).
-
-**3. Output Data Structure (`data.js`)**
-Add new keys to the exported JSON:
-*   `fastest_wickets`:
-    *   `overall`: {50: [...], 100: [...], ...} (List sorted by innings)
-    *   `for_team`: Dictionary `{TeamName: [ {name, innings, ...} ]}`.
-    *   `vs_team`: Dictionary `{OppositionName: [ {name, innings, ...} ]}`.
-*   `best_figures_innings`:
-    *   `5_fer`: List of `{name, team, opposition, runs, balls, wickets, date}`.
-    *   `4_fer`: List ...
-
-### Frontend (`index.html` & `app.js`)
-
-#### [MODIFY] [index.html](file:///c:/Users/Sai%20Krishna/OneDrive/Desktop/T20i%20Runs%20Stats/index.html)
-*   Add new Section/Tabs for "Bowling Milestones" and "Best Figures".
-*   "Bowling Milestones":
-    *   Dropdown: Milestone (50, 100, 150, 200).
-    *   Dropdown: Type (Overall, For Team, Vs Team).
-    *   Dropdown: Team Filter (Dynamic based on Type).
-*   "Best Figures (Speed)":
-    *   Dropdown: Type (5 Wickets, 4 Wickets).
-    *   Dropdown: Filter Team/Opposition.
-
-#### [MODIFY] [app.js](file:///c:/Users/Sai%20Krishna/OneDrive/Desktop/T20i%20Runs%20Stats/app.js)
-*   Render functions for the new tables:
-    *   `renderMilestoneTable(data)`
-    *   `renderBestFiguresTable(data)`
+#### [MODIFY] [app.js](file:///c:/Users/Sai Krishna/OneDrive/Desktop/T20i Runs Stats/app.js)
+- Update `updateMostWicketsTable` and `updateBowlingMilestonesTable`.
+- Handle `team_vs_team` filter mode:
+    - Show both dropdowns.
+    - Filter data using `statsData.most_wickets.team_vs[team][opp]` or similar.
+    - populate dropdowns dynamically based on available keys.
 
 ## Verification Plan
-1.  Run `data_processor.py`.
-2.  Check `data.js` output.
-3.  Open `index.html` and verify tables and filters.
-4.  Notify user.
+
+### Automated Tests
+- Run `data_processor.py` and inspect `data.json` output for `innings_milestones` keys.
+- Check that lists are sorted correctly (Fastest: Low balls first; Slowest: High balls first).
+
+### Manual Verification
+- Open `index.html`.
+- Navigate to "Innings Milestones".
+- Check "Fastest 50 Overall" - Expect known records (e.g. Yuvraj Singh, Dipendra Singh Airee).
+- Check "Slowest 50 Overall".
+- Filter by Team "India" -> Fastest 50.
+- Filter Vs Team "Australia" -> Fastest 50.
