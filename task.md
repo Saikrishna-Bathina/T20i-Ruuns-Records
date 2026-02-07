@@ -51,3 +51,15 @@
         - [x] Update "Fastest Wickets" filters to include "Team vs Opposition" <!-- id: 40 -->
         - [x] Implement logic to show/hide dual dropdowns <!-- id: 41 -->
         - [x] Verify data filtering and display <!-- id: 42 -->
+
+- [ ] **Phase Stats & World Cup Filtering** <!-- id: 43 -->
+    - [ ] **Backend Refactoring (`data_processor.py`)** <!-- id: 44 -->
+        - [ ] Update `get_phase` definitions (PP: 0-6, Mid: 7-15, Death: 16-20) <!-- id: 45 -->
+        - [ ] Implement `is_world_cup(event)` logic <!-- id: 46 -->
+        - [ ] Refactor aggregation to `StatsContainer` for multi-context support <!-- id: 47 -->
+        - [ ] Process matches into `all`, `wc_overall`, and `wc_edition` contexts <!-- id: 48 -->
+        - [ ] Export `statsData` with `tournaments` substructure <!-- id: 49 -->
+    - [ ] **Frontend Updates (`index.html`, `app.js`)** <!-- id: 50 -->
+        - [ ] Add Global Tournament Filter to UI <!-- id: 51 -->
+        - [ ] Implement `currentData` logic in `app.js` to switch datasets <!-- id: 52 -->
+        - [ ] Verify Phase Stats boundaries and World Cup data <!-- id: 53 -->

@@ -1,26 +1,57 @@
-
-let statsData = {};
+let currentStats = {};
 
 document.addEventListener('DOMContentLoaded', () => {
-    if (typeof t20Data !== 'undefined') {
-        statsData = t20Data;
+    if (typeof statsData !== 'undefined') {
+        currentStats = statsData; // Default to 'all' (which is root of statsData)
+        populateTournamentContext();
         initDashboard();
     } else {
         console.error('Data not found. Ensure data.js is loaded.');
     }
 });
 
+function populateTournamentContext() {
+    if (!statsData.tournaments) return;
+    const select = document.getElementById('tournamentSelect');
+    // Clear existing (except first 'all')
+    select.innerHTML = '<option value="all">All T20Is (Overall)</option>';
+
+    const keys = Object.keys(statsData.tournaments).sort();
+    keys.forEach(key => {
+        const option = document.createElement('option');
+        option.value = key;
+        // Format label: wc_2024 -> WC 2024, wc -> World Cup (All)
+        let label = key;
+        if (key === 'wc') label = 'World Cup (All Years)';
+        else if (key.startsWith('wc_')) label = 'World Cup ' + key.split('_')[1];
+
+        option.textContent = label;
+        select.appendChild(option);
+    });
+}
+
+function changeTournamentContext() {
+    const key = document.getElementById('tournamentSelect').value;
+    if (key === 'all') {
+        currentStats = statsData;
+    } else {
+        currentStats = statsData.tournaments[key];
+    }
+    // Re-init dashboard with new data
+    initDashboard();
+}
+
 function initDashboard() {
-    if (statsData.most_runs) updateMostRunsTable();
-    if (statsData.highest_scores) renderHighestScores();
+    if (currentStats.most_runs) updateMostRunsTable();
+    if (currentStats.highest_scores) renderHighestScores();
     populateCountryDropdown();
     updateFastestTable();
     updateFastestInningsTable();
-    updateFastestTable();
-    updateFastestInningsTable();
+    updateFastestTable(); // Duplicate call in original? removing one.
+    updateFastestInningsTable(); // Duplicate? removing one.
     updatePhaseStatsTable();
     updateBowlingMilestonesTable();
-    updateInningsMilestonesTable(); // New
+    updateInningsMilestonesTable();
     updateBestBowlingTable();
     updateMostWicketsTable();
     updateMostHaulsTable();
@@ -43,9 +74,9 @@ function updateMostRunsTable() {
 
     let data;
     if (positionFilter === 'All') {
-        data = statsData.most_runs;
+        data = currentStats.most_runs || [];
     } else {
-        data = statsData.most_runs_by_position?.[positionFilter] || [];
+        data = currentStats.most_runs_by_position?.[positionFilter] || [];
     }
 
     if (searchQuery) {
@@ -75,13 +106,15 @@ function renderHighestScores() {
     const tbody = document.querySelector('#highestScoreTable tbody');
     tbody.innerHTML = '';
 
-    statsData.highest_scores.forEach((innings, index) => {
+    if (!currentStats.highest_scores) return;
+
+    currentStats.highest_scores.forEach((innings, index) => {
         const strikeRate = ((innings.runs / innings.balls) * 100).toFixed(2);
         // Format date slightly better if needed, currently YYYY-MM-DD
         const date = innings.date;
 
         // Add * if not out
-        const scoreDisplay = innings.is_out ? innings.runs : `${innings.runs}*`;
+        const scoreDisplay = innings.is_out === false ? `${innings.runs}*` : innings.runs; // Fixed logic (is_out false means not out)
 
         const row = `
             <tr>
@@ -103,16 +136,22 @@ function populateCountryDropdown() {
     const oppositionSet = new Set();
 
     // Collect all countries from fastest milestones data
-    for (const milestone in statsData.fastest_milestones) {
-        statsData.fastest_milestones[milestone].forEach(p => countrySet.add(p.team));
+    // Use currentStats or statsData? 
+    // Ideally user wants filtering based on CURRENT context.
+    if (currentStats.fastest_milestones) {
+        for (const milestone in currentStats.fastest_milestones) {
+            currentStats.fastest_milestones[milestone].forEach(p => countrySet.add(p.team));
+        }
     }
 
     // Also collect from fastest innings for opposition
-    for (const milestone in statsData.fastest_innings_milestones) {
-        statsData.fastest_innings_milestones[milestone].forEach(p => {
-            countrySet.add(p.team);
-            if (p.minq) oppositionSet.add(p.minq);
-        });
+    if (currentStats.fastest_innings_milestones) {
+        for (const milestone in currentStats.fastest_innings_milestones) {
+            currentStats.fastest_innings_milestones[milestone].forEach(p => {
+                countrySet.add(p.team);
+                if (p.minq) oppositionSet.add(p.minq);
+            });
+        }
     }
 
     const select = document.getElementById('countrySelect');
@@ -124,52 +163,38 @@ function populateCountryDropdown() {
     const sortedCountries = [...countrySet].sort();
     const sortedOppositions = [...oppositionSet].sort();
 
-    // Populate main country dropdown
-    sortedCountries.forEach(country => {
-        const option = document.createElement('option');
-        option.value = country;
-        option.textContent = country;
-        select.appendChild(option);
-    });
+    // Helper to populate
+    const populate = (sel, items) => {
+        if (!sel) return;
+        // Keep 'All' option, remove others
+        sel.innerHTML = '<option value="All">All</option>'; // Simply reset
+        // Wait, 'All Countries' or 'All'?
+        // Original had <option value="All">All Countries</option> hardcoded in HTML.
+        // So we should append. But if we re-run this function on context switch, we must clear old options.
+        // But HTML has hardcoded options.
+        // Let's reset to hardcoded + new.
+        // Or just clear innerHTML and re-add All.
 
-    // Populate innings country dropdown
-    if (selectInnings) {
-        sortedCountries.forEach(country => {
-            const option = document.createElement('option');
-            option.value = country;
-            option.textContent = country;
-            selectInnings.appendChild(option);
-        });
-    }
+        // Check ID to customize All text?
+        let allText = "All";
+        if (sel.id.includes('Country')) allText = "All Countries";
+        if (sel.id.includes('Opposition')) allText = "All Oppositions";
 
-    // Populate Phase Stats Country Dropdown
-    if (phaseCountrySelect) {
-        sortedCountries.forEach(country => {
-            const option = document.createElement('option');
-            option.value = country;
-            option.textContent = country;
-            phaseCountrySelect.appendChild(option);
-        });
-    }
+        sel.innerHTML = `<option value="All">${allText}</option>`;
 
-    if (selectOpposition) {
-        sortedOppositions.forEach(opp => {
+        items.forEach(item => {
             const option = document.createElement('option');
-            option.value = opp;
-            option.textContent = opp;
-            selectOpposition.appendChild(option);
+            option.value = item;
+            option.textContent = item;
+            sel.appendChild(option);
         });
-    }
+    };
 
-    // Populate Phase Stats Opposition Dropdown
-    if (phaseOppositionSelect) {
-        sortedOppositions.forEach(opp => {
-            const option = document.createElement('option');
-            option.value = opp;
-            option.textContent = opp;
-            phaseOppositionSelect.appendChild(option);
-        });
-    }
+    populate(select, sortedCountries);
+    populate(selectInnings, sortedCountries);
+    populate(selectOpposition, sortedOppositions);
+    populate(phaseCountrySelect, sortedCountries);
+    populate(phaseOppositionSelect, sortedOppositions);
 }
 
 function updateFastestTable() {
@@ -200,11 +225,13 @@ function updateFastestTable() {
         `;
     }
 
+    if (!currentStats.fastest_milestones) return;
+
     let data;
     if (metric === 'balls') {
-        data = statsData.fastest_milestones[milestone] || [];
+        data = currentStats.fastest_milestones[milestone] || [];
     } else {
-        data = statsData.fastest_milestones_innings[milestone] || [];
+        data = currentStats.fastest_milestones_innings[milestone] || [];
     }
 
     if (countryFilter !== 'All') {
@@ -251,7 +278,9 @@ function updateFastestInningsTable() {
     const tbody = document.querySelector('#fastestInningsTable tbody');
     tbody.innerHTML = '';
 
-    let data = statsData.fastest_innings_milestones?.[milestone] || [];
+    if (!currentStats.fastest_innings_milestones) return;
+
+    let data = currentStats.fastest_innings_milestones[milestone] || [];
 
     if (countryFilter && countryFilter !== 'All') {
         data = data.filter(p => p.team === countryFilter);
@@ -262,7 +291,7 @@ function updateFastestInningsTable() {
     }
 
     if (positionFilter && positionFilter !== 'All') {
-        data = data.filter(p => p.position === positionFilter);
+        data = data.filter(p => p.position == positionFilter); // Loose equality for string/int match
     }
 
     if (searchQuery) {
@@ -372,12 +401,12 @@ function updatePhaseStatsTable() {
     thead.innerHTML = headers;
 
     // Get Data
-    if (!statsData.phase_stats || !statsData.phase_stats[category] || !statsData.phase_stats[category][phase]) {
+    if (!currentStats.phase_stats || !currentStats.phase_stats[category] || !currentStats.phase_stats[category][phase]) {
         tbody.innerHTML = '<tr><td colspan="5">Data not available (Run data_processor.py to update).</td></tr>';
         return;
     }
 
-    let data = [...statsData.phase_stats[category][phase]]; // Copy array to avoid mutating original
+    let data = [...currentStats.phase_stats[category][phase]]; // Copy array
 
     // Apply Dropdown Filters
     if (countryFilter && countryFilter !== 'All') {
@@ -533,7 +562,7 @@ function updateBowlingMilestonesTable() {
     let teamHeader = "Team";
     if (type === 'for_team') teamHeader = "Team";
     if (type === 'vs_team') teamHeader = "Opposition";
-    if (type === 'team_vs') teamHeader = "Opposition"; // In Team vs Opp, show Opp name? Or both? Lists are specific. Context is clear.
+    if (type === 'team_vs') teamHeader = "Opposition";
 
     thead.innerHTML = `
         <th>Rank</th>
@@ -545,39 +574,45 @@ function updateBowlingMilestonesTable() {
 
     // Fetch Data
     let data = [];
-    if (!statsData.fastest_wickets) {
+    if (!currentStats.fastest_wickets) {
         tbody.innerHTML = '<tr><td colspan="5">Data not loaded.</td></tr>';
         return;
     }
 
     if (type === 'overall') {
-        data = statsData.fastest_wickets.overall[milestone] || [];
+        data = currentStats.fastest_wickets.overall[milestone] || [];
     } else if (type === 'for_team') {
         const team = teamSelect.value;
         if (team === 'All') {
             let all = [];
-            Object.values(statsData.fastest_wickets.for_team).forEach(arr => {
+            Object.values(currentStats.fastest_wickets.for_team).forEach(arr => {
                 if (arr[milestone]) all = all.concat(arr[milestone]);
             });
             data = all;
         } else {
-            data = statsData.fastest_wickets.for_team[team]?.[milestone] || [];
+            data = currentStats.fastest_wickets.for_team[team]?.[milestone] || [];
         }
     } else if (type === 'vs_team') {
         const team = teamSelect.value;
         if (team === 'All') {
             let all = [];
-            Object.values(statsData.fastest_wickets.vs_team).forEach(arr => {
+            Object.values(currentStats.fastest_wickets.vs_team).forEach(arr => {
                 if (arr[milestone]) all = all.concat(arr[milestone]);
             });
             data = all;
         } else {
-            data = statsData.fastest_wickets.vs_team[team]?.[milestone] || [];
+            data = currentStats.fastest_wickets.vs_team[team]?.[milestone] || [];
         }
     } else if (type === 'team_vs') {
-        // Populate Team Dropdown if empty
+        // Populate Team Dropdown if empty OR if we switched context (re-check)
+        // With overwrite, we might need to clear dropdowns on context switch? 
+        // `populateTournamentContext` does not clear these dropdowns.
+        // But `updateBowlingMilestonesTable` is called on init.
+        // We should clear them if they don't match data? 
+        // Let's rely on 'if length <= 1' logic for now.
+
         if (teamSelect.options.length <= 1) {
-            const keys = Object.keys(statsData.fastest_wickets.team_vs || {}).sort();
+            const keys = Object.keys(currentStats.fastest_wickets.team_vs || {}).sort();
             keys.forEach(t => {
                 const opt = document.createElement('option');
                 opt.value = t;
@@ -590,18 +625,9 @@ function updateBowlingMilestonesTable() {
         const team = teamSelect.value;
         // Populate Opp Dropdown based on Team
         if (team && team !== 'All') {
-            const oppNodes = statsData.fastest_wickets.team_vs[team] || {};
-            // Check if oppSelect needs update (simple check: if only 1 option or first option is not relevant)
-            // Better: Clear and repopulate if team changed.
-            // We need a way to detect if we should repopulate.
-            // Let's doing it if oppSelect has only "All" or match current team?
-            // Actually, we should trigger repopulate on change.
-            // Here we assume if empty, populate.
+            const oppNodes = currentStats.fastest_wickets.team_vs[team] || {};
             if (oppSelect.options.length <= 1 || oppSelect.getAttribute('data-team') !== team) {
-                oppSelect.innerHTML = ''; // Remote 'All' since specific pair? Or keep? 'All' oppositions? 
-                // If 'All' oppositions, that's just 'for_team' effectively.
-                // So for 'team_vs', let's force selection or default to first.
-
+                oppSelect.innerHTML = '';
                 const oppKeys = Object.keys(oppNodes).sort();
                 oppKeys.forEach(o => {
                     const opt = document.createElement('option');
@@ -615,8 +641,8 @@ function updateBowlingMilestonesTable() {
         }
 
         const opp = oppSelect.value;
-        if (team && opp && statsData.fastest_wickets.team_vs[team] && statsData.fastest_wickets.team_vs[team][opp]) {
-            data = statsData.fastest_wickets.team_vs[team][opp][milestone] || [];
+        if (team && opp && currentStats.fastest_wickets.team_vs[team] && currentStats.fastest_wickets.team_vs[team][opp]) {
+            data = currentStats.fastest_wickets.team_vs[team][opp][milestone] || [];
         }
     }
 
@@ -637,21 +663,9 @@ function updateBowlingMilestonesTable() {
     }
 
     data.slice(0, 50).forEach((player, index) => {
-        const displayTeam = (type === 'vs_team' || type === 'team_vs') ? player.team : player.team;
-        // Logic: 
-        // Overall: Show Team
-        // For Team: Show Team (Redundant but okay)
-        // Vs Team: Show Team (The player's team)
-        // Team Vs Opp: Show Team? Or Opp?
-        // Header says "Opposition" for type vs_team.
-        // If header is "Opposition", we should show 'opposition' data? 
-        // But 'player' object might not have 'opposition' field in 'fastest_wickets' structure (check data).
-        // Format: {name, innings, date, match_id, team}. It does NOT have opposition in the record usually.
-        // For 'team_vs', we know the opposition is 'opp'. 
-
         let col3 = player.team;
-        if (type === 'vs_team') col3 = player.team; // Show player's team
-        if (type === 'team_vs') col3 = oppSelect.value; // Show Opposition? Header is Opposition.
+        if (type === 'vs_team') col3 = player.team;
+        if (type === 'team_vs') col3 = oppSelect.value;
 
         const row = `
             <tr>
@@ -668,8 +682,8 @@ function updateBowlingMilestonesTable() {
     // Check if dropdown needs populating (Legacy types)
     if (type !== 'overall' && type !== 'team_vs' && teamSelect.options.length <= 1) {
         let keys = [];
-        if (type === 'for_team') keys = Object.keys(statsData.fastest_wickets.for_team).sort();
-        else if (type === 'vs_team') keys = Object.keys(statsData.fastest_wickets.vs_team).sort();
+        if (type === 'for_team') keys = Object.keys(currentStats.fastest_wickets.for_team).sort();
+        else if (type === 'vs_team') keys = Object.keys(currentStats.fastest_wickets.vs_team).sort();
 
         keys.forEach(t => {
             const opt = document.createElement('option');
@@ -710,9 +724,9 @@ function updateBestBowlingTable() {
 
     tbody.innerHTML = '';
 
-    if (!statsData.best_figures) return;
+    if (!currentStats.best_figures) return;
 
-    let data = statsData.best_figures[type] || [];
+    let data = currentStats.best_figures[type] || [];
 
     if (teamFilter !== 'All') {
         data = data.filter(p => p.team === teamFilter);
@@ -748,8 +762,8 @@ function updateBestBowlingTable() {
     if (sel && sel.options.length <= 1) {
         const teams = new Set();
         ['4_wickets', '5_wickets'].forEach(key => {
-            if (statsData.best_figures[key]) {
-                statsData.best_figures[key].forEach(p => teams.add(p.team));
+            if (currentStats.best_figures[key]) {
+                currentStats.best_figures[key].forEach(p => teams.add(p.team));
             }
         });
         [...teams].sort().forEach(t => {
@@ -795,33 +809,33 @@ function updateMostWicketsTable() {
         oppLabel.style.display = 'none';
     }
 
-    if (!statsData.most_wickets) return;
+    if (!currentStats.most_wickets) return;
 
     let data = [];
     if (type === 'overall') {
-        data = statsData.most_wickets.overall || [];
+        data = currentStats.most_wickets.overall || [];
     } else if (type === 'for_team') {
         const team = teamSelect.value;
         if (team === 'All') {
-            Object.values(statsData.most_wickets.for_team).forEach(arr => {
+            Object.values(currentStats.most_wickets.for_team).forEach(arr => {
                 data = data.concat(arr);
             });
         } else {
-            data = statsData.most_wickets.for_team[team] || [];
+            data = currentStats.most_wickets.for_team[team] || [];
         }
     } else if (type === 'vs_team') {
         const team = teamSelect.value;
         if (team === 'All') {
-            Object.values(statsData.most_wickets.vs_team).forEach(arr => {
+            Object.values(currentStats.most_wickets.vs_team).forEach(arr => {
                 data = data.concat(arr);
             });
         } else {
-            data = statsData.most_wickets.vs_team[team] || [];
+            data = currentStats.most_wickets.vs_team[team] || [];
         }
     } else if (type === 'team_vs') {
         // Populate Team Dropdown
         if (teamSelect.options.length <= 1) {
-            const keys = Object.keys(statsData.most_wickets.team_vs || {}).sort();
+            const keys = Object.keys(currentStats.most_wickets.team_vs || {}).sort();
             keys.forEach(t => {
                 const opt = document.createElement('option');
                 opt.value = t;
@@ -834,7 +848,7 @@ function updateMostWicketsTable() {
         const team = teamSelect.value;
         // Populate Opp Dropdown
         if (team && team !== 'All') {
-            const oppNodes = statsData.most_wickets.team_vs[team] || {};
+            const oppNodes = currentStats.most_wickets.team_vs[team] || {};
             if (oppSelect.options.length <= 1 || oppSelect.getAttribute('data-team') !== team) {
                 oppSelect.innerHTML = '';
                 const oppKeys = Object.keys(oppNodes).sort();
@@ -850,8 +864,8 @@ function updateMostWicketsTable() {
         }
 
         const opp = oppSelect.value;
-        if (team && opp && statsData.most_wickets.team_vs[team] && statsData.most_wickets.team_vs[team][opp]) {
-            data = statsData.most_wickets.team_vs[team][opp] || [];
+        if (team && opp && currentStats.most_wickets.team_vs[team] && currentStats.most_wickets.team_vs[team][opp]) {
+            data = currentStats.most_wickets.team_vs[team][opp] || [];
         }
     }
 
@@ -893,8 +907,8 @@ function updateMostWicketsTable() {
     // Helper for dropdown population logic (Legacy)
     if (type !== 'overall' && type !== 'team_vs' && teamSelect.options.length <= 1) {
         let keys = [];
-        if (type === 'for_team') keys = Object.keys(statsData.most_wickets.for_team).sort();
-        else if (type === 'vs_team') keys = Object.keys(statsData.most_wickets.vs_team).sort();
+        if (type === 'for_team') keys = Object.keys(currentStats.most_wickets.for_team).sort();
+        else if (type === 'vs_team') keys = Object.keys(currentStats.most_wickets.vs_team).sort();
 
         keys.forEach(t => {
             const opt = document.createElement('option');
@@ -934,9 +948,9 @@ function updateMostHaulsTable() {
 
     tbody.innerHTML = '';
 
-    if (!statsData.most_hauls) return;
+    if (!currentStats.most_hauls) return;
 
-    let data = statsData.most_hauls[type] || [];
+    let data = currentStats.most_hauls[type] || [];
 
     if (searchQuery) {
         data = data.filter(p => p.name.toLowerCase().includes(searchQuery));
@@ -986,15 +1000,15 @@ function updateInningsMilestonesTable() {
         teamLabel.style.display = 'none';
     }
 
-    if (!statsData.innings_milestones) return;
+    if (!currentStats.innings_milestones) return;
 
     let data = [];
     if (group === 'overall') {
-        if (statsData.innings_milestones.overall[milestone])
-            data = statsData.innings_milestones.overall[milestone][metric] || [];
+        if (currentStats.innings_milestones.overall[milestone])
+            data = currentStats.innings_milestones.overall[milestone][metric] || [];
     } else {
         const groupKey = group === 'team' ? 'team' : 'vs';
-        const sourceData = statsData.innings_milestones[groupKey];
+        const sourceData = currentStats.innings_milestones[groupKey];
 
         if (sourceData) {
             // Populate if empty

@@ -35,26 +35,36 @@ Support filtering by **Team** and **Vs Team (Opposition)** as requested.
 
 ### Backend - `data_processor.py`
 #### [MODIFY] [data_processor.py](file:///c:/Users/Sai Krishna/OneDrive/Desktop/T20i Runs Stats/data_processor.py)
-- **Fastest Wickets**:
-    - Add `bowler_team_vs_stats` dict to track career stats per (Team, Opposition) pair.
-    - Update `update_bowler_career` to populate this new dict.
-    - Export `fastest_wickets_team_vs` structure: `Team -> Opposition -> Milestone -> List`.
-- **Most Wickets**:
-    - Add `agg_team_vs` aggregation using key `(team, opposition, name)`.
-    - Export `most_wickets_team_vs` structure: `Team -> Opposition -> List`.
+- **Phase Logic**:
+    - Update `get_phase` boundaries:
+        - Powerplay: 0-5 (Overs 1-6)
+        - Middle: 6-14 (Overs 7-15)
+        - Death: 15-19 (Overs 16-20)
+- **Multi-Context Aggregation (World Cups)**:
+    - Identify WC matches via `event` field ("World T20", "T20 World Cup").
+    - Logic to map Match -> List of Contexts (e.g., `['all', 'wc', 'wc_2024']`).
+    - Refactor global stats variables (`batsman_career_stats`, `most_runs_list`, etc.) into a `StatsContainer` class or dictionary structure.
+    - Update processing loop to `update(stats, context)` for every relevant context.
+    - Export `statsData` with `tournaments` key containing sub-datasets.
 
 ### Frontend - `index.html` & `app.js`
 #### [MODIFY] [index.html](file:///c:/Users/Sai Krishna/OneDrive/Desktop/T20i Runs Stats/index.html)
-- Update "Most Wickets" and "Bowling Milestones" controls.
-- Add "Team vs Opposition" option to Type select.
-- Ensure both "Select Team" and "Select Opposition" dropdowns are available and toggleable.
+- Add Global Filter: "Select Tournament" (All, World Cup Overall, Specific Years).
+- Update UI to reflect the active dataset.
 
 #### [MODIFY] [app.js](file:///c:/Users/Sai Krishna/OneDrive/Desktop/T20i Runs Stats/app.js)
-- Update `updateMostWicketsTable` and `updateBowlingMilestonesTable`.
-- Handle `team_vs_team` filter mode:
-    - Show both dropdowns.
-    - Filter data using `statsData.most_wickets.team_vs[team][opp]` or similar.
-    - populate dropdowns dynamically based on available keys.
+- Maintain `currentData` reference (defaulting to `statsData`).
+- On Tournament Filter change:
+    - Update `currentData` to point to `statsData.tournaments[key]` (or root for 'all').
+    - Re-trigger all active table updates (`updateMostRuns`, etc.).
+- Ensure all existing functions read from `currentData` instead of global `statsData`.
+
+## Verification Plan
+- **Phase Stats**: Check Phase stats table for known boundary cases (e.g. over 15 should be 'Death').
+- **World Cup**:
+    - Verify "Overall" stats match ESPN/Cricinfo for a known player (e.g. Kohli WC Runs).
+    - Verify "2024 WC" stats match that specific tournament.
+- **Performance**: Ensure 10-12x data duplication doesn't crash browser (check `data.js` size).
 
 ## Verification Plan
 

@@ -43,14 +43,13 @@ def parse_date(date_str):
     if not date_str:
         return datetime.datetime.min
     try:
-        # Formats can vary: '2021-01-01' or '2021/01/01'
         return datetime.datetime.strptime(date_str.replace('/', '-'), "%Y-%m-%d")
     except ValueError:
         return datetime.datetime.min
 
 def get_match_outcomes(extract_dir):
     outcomes = {}
-    print("Reading match info files...")
+    # print("Reading match info files...")
     info_files = [f for f in os.listdir(extract_dir) if f.endswith('_info.csv')]
     
     for f_name in info_files:
@@ -64,7 +63,6 @@ def get_match_outcomes(extract_dir):
                 for line in f:
                     parts = line.strip().split(',')
                     if len(parts) >= 3 and parts[0] == 'info':
-                        # Check for outcome/result keys
                         key = parts[1].lower()
                         val = parts[2].lower()
                         
@@ -76,9 +74,6 @@ def get_match_outcomes(extract_dir):
                             is_abandoned = True
                         elif key == 'outcome' and val == 'tie':
                             result = "Tie"
-                            
-                        # Sometimes winner is missing in abandoned matches, 
-                        # but we rely on explicit 'no result' key.
         except Exception:
             pass
             
@@ -86,13 +81,353 @@ def get_match_outcomes(extract_dir):
         
     return outcomes
 
+# --- NEW HELPERS ---
+
+def get_phase(ball_val):
+    over = int(ball_val)
+    if over < 6:
+        return "Powerplay"
+    elif over < 15: # 6 to 14.99 (Overs 7-15)
+        return "Middle"
+    else: # 15+ (Overs 16-20)
+        return "Death"
+        
+def load_match_info(extract_dir):
+    info_map = {}
+    for f_name in os.listdir(extract_dir):
+        if f_name.endswith('_info.csv'):
+            mid = f_name.replace('_info.csv', '')
+            info_map[mid] = {}
+            try:
+                with open(os.path.join(extract_dir, f_name), 'r', encoding='utf-8') as f:
+                    for line in f:
+                        parts = line.strip().split(',')
+                        if len(parts) >= 3 and parts[0] == 'info':
+                            key = parts[1].lower()
+                            val = ",".join(parts[2:]).replace('"', '')
+                            info_map[mid][key] = val
+            except: pass
+    return info_map
+
+class StatsContext:
+    def __init__(self, name):
+        self.name = name
+        
+        # --- BATTING STATS ---
+        self.batsman_career_stats = {} 
+        self.most_runs_list = []
+        self.fastest_milestones = {1000: [], 2000: [], 3000: [], 4000: [], 5000: []}
+        self.fastest_milestones_innings = {1000: [], 2000: [], 3000: [], 4000: [], 5000: []}
+        self.highest_scores_list = []
+        self.fastest_innings_milestones = {}
+        self.innings_milestones = { "overall": {}, "team": {}, "vs": {} }
+        self.most_runs_by_position = {} 
+        
+        # --- BOWLING STATS ---
+        self.bowler_career_stats = {} 
+        self.bowler_team_stats = {} 
+        self.bowler_vs_stats = {} 
+        self.bowler_team_vs_stats = {}
+        self.best_figures_candidates = []
+        self.fastest_wickets_overall = {}
+        self.fastest_wickets_team = {}
+        self.fastest_wickets_vs = {}
+        self.fastest_wickets_team_vs = {}
+        
+        # --- PHASE STATS ---
+        self.phase_stats = {
+            "Powerplay": {"batsmen": {}, "bowlers": {}},
+            "Middle": {"batsmen": {}, "bowlers": {}},
+            "Death": {"batsmen": {}, "bowlers": {}}
+        }
+        self.final_phase_stats = {
+                "team_innings_highs": {},
+                "batsman_innings_highs": {},
+                "bowler_innings_wickets": {},
+                "batsman_runs": {},
+                "bowler_wickets": {}
+        }
+        self.team_highs_candidates = { p: [] for p in ["Powerplay", "Middle", "Death"] }
+        self.batsman_phase_highs_candidates = { p: [] for p in ["Powerplay", "Middle", "Death"] }
+        self.bowler_phase_best_candidates = { p: [] for p in ["Powerplay", "Middle", "Death"] }
+        
+    def process_match(self, innings_stats, bowler_innings_stats, team_innings_stats, mid, match_date, info):
+        # --- AGGREGATE BATTING ---
+        for key, stats in innings_stats.items():
+            name = stats["name"]
+            team = stats["team"]
+            runs = stats["runs"]
+            balls = stats["balls"]
+            is_out = stats["is_out"]
+            pos = stats.get("position", 11)
+            
+            if name not in self.batsman_career_stats:
+                self.batsman_career_stats[name] = {"runs": 0, "balls": 0, "innings": 0, "hs": 0, "hs_not_out": False, "100": 0, "50": 0, "4s": 0, "6s": 0, "team": team, "span_start": match_date, "span_end": match_date}
+            
+            p = self.batsman_career_stats[name]
+            p["runs"] += runs
+            p["balls"] += balls
+            p["innings"] += 1
+            if runs >= 100: p["100"] += 1
+            elif runs >= 50: p["50"] += 1
+            
+            if runs > p["hs"]:
+                p["hs"] = runs
+                p["hs_not_out"] = (not is_out)
+            elif runs == p["hs"] and not is_out:
+                p["hs_not_out"] = True
+                
+            if match_date < p["span_start"]: p["span_start"] = match_date
+            if match_date > p["span_end"]: p["span_end"] = match_date
+            
+            current_runs = p["runs"]
+            current_innings = p["innings"]
+            for m in [1000, 2000, 3000, 4000, 5000]:
+                prev_runs = p["runs"] - runs
+                if prev_runs < m and current_runs >= m:
+                            if m not in self.fastest_milestones: self.fastest_milestones[m] = []
+                            self.fastest_milestones[m].append({ "name": name, "team": team, "balls": p["balls"], "date": match_date, "innings": current_innings })
+                            
+                            if m not in self.fastest_milestones_innings: self.fastest_milestones_innings[m] = []
+                            self.fastest_milestones_innings[m].append({ "name": name, "team": team, "innings": current_innings, "date": match_date })
+
+            if runs >= 30: 
+                    entry = {
+                    "name": name, "team": team, "runs": runs, "balls": balls,
+                    "4s": stats.get("4s", 0), "6s": stats.get("6s", 0),
+                    "sr": round(runs * 100 / balls, 2) if balls > 0 else 0,
+                    "date": match_date, "not_out": not is_out,
+                    "opposition": stats["opposition"], "venue": stats.get("venue", ""), "position": pos
+                    }
+                    self.highest_scores_list.append(entry)
+                    
+                    if pos not in self.most_runs_by_position: self.most_runs_by_position[pos] = []
+                    self.most_runs_by_position[pos].append(entry)
+
+            for m_str, m_val in [("50", 50), ("100", 100), ("150", 150), ("200", 200)]:
+                if runs >= m_val: self._check_innings_milestones(stats, match_date, m_str)
+
+            if 'phases' in stats:
+                    for phase, p_data in stats['phases'].items():
+                        if p_data['runs'] > 0:
+                            self.batsman_phase_highs_candidates[phase].append({
+                                "name": name, "team": team, "opposition": stats["opposition"],
+                                "runs": p_data['runs'], "balls": p_data['balls'], "date": match_date, "venue": stats.get("venue", "")
+                            })
+
+        # --- AGGREGATE BOWLING ---
+        for key, stats in bowler_innings_stats.items():
+            name = stats["name"]
+            team = stats["team"]
+            opp = stats["opposition"]
+            wkt = stats["total_wickets"]
+            runs = stats["total_runs"]
+            balls = stats["total_balls"]
+            
+            if name not in self.bowler_career_stats:
+                    self.bowler_career_stats[name] = {"wickets": 0, "runs": 0, "balls": 0, "innings": 0, "4w": 0, "5w": 0, "team": team, "span_start": match_date, "span_end": match_date}
+            
+            b = self.bowler_career_stats[name]
+            b["wickets"] += wkt
+            b["runs"] += runs
+            b["balls"] += balls
+            b["innings"] += 1
+            if wkt == 4: b["4w"] += 1
+            if wkt >= 5: b["5w"] += 1
+            if match_date < b["span_start"]: b["span_start"] = match_date
+            if match_date > b["span_end"]: b["span_end"] = match_date
+
+            if wkt >= 3: 
+                self.best_figures_candidates.append({
+                    "name": name, "team": team, "opposition": opp,
+                    "wickets": wkt, "runs": runs, "balls": balls,
+                    "venue": stats.get("venue", ""), "date": match_date
+                })
+
+            start_w = b["wickets"] - wkt
+            end_w = b["wickets"]
+            for wm in [50, 100, 150, 200, 250, 300]:
+                if start_w < wm and end_w >= wm:
+                    if wm not in self.fastest_wickets_overall: self.fastest_wickets_overall[wm] = []
+                    self.fastest_wickets_overall[wm].append({
+                        "name": name, "team": team, "innings": b["innings"], "date": match_date
+                    })
+            
+            self._update_bowler_sub_stats(self.bowler_team_stats, team, name, wkt, match_date, mid)
+            self._update_bowler_sub_stats(self.bowler_vs_stats, opp, name, wkt, match_date, mid)
+            
+            if team not in self.bowler_team_vs_stats: self.bowler_team_vs_stats[team] = {}
+            self._update_bowler_sub_stats(self.bowler_team_vs_stats[team], opp, name, wkt, match_date, mid)
+            
+            if 'phases' in stats:
+                    for phase, p_data in stats['phases'].items():
+                        if p_data['w'] > 0:
+                            self.bowler_phase_best_candidates[phase].append({
+                                "name": name, "team": team, "opposition": opp,
+                                "value": p_data['w'], "runs": p_data['r'], "date": match_date, "venue": stats.get("venue", "")
+                            })
+
+        # --- TEAM HIGH SCORES ---
+        for phase, p_data in team_innings_stats.items():
+            if phase in ["Powerplay", "Middle", "Death"]:
+                    if p_data['runs'] > 0:
+                        self.team_highs_candidates[phase].append({
+                            "team": p_data['team'], "opposition": p_data['opposition'],
+                            "runs": p_data['runs'], "wickets": p_data['wickets'], "balls": p_data['balls'],
+                            "date": match_date, "venue": team_innings_stats.get('venue', ''), "result": info.get('winner', '')
+                        })
+
+    def get_final_data(self):
+        most_runs = []
+        for name, s in self.batsman_career_stats.items():
+            if s["runs"] > 50: 
+                avg = s["runs"] / (s["innings"] - (1 if s["hs_not_out"] else 0)) if (s["innings"] - (1 if s["hs_not_out"] else 0)) > 0 else s["runs"]
+                sr = s["runs"] * 100 / s["balls"] if s["balls"] > 0 else 0
+                most_runs.append({
+                    "name": name, "team": s["team"], "runs": s["runs"], "innings": s["innings"],
+                    "hs": f"{s['hs']}*" if s["hs_not_out"] else f"{s['hs']}",
+                    "avg": round(avg, 2), "sr": round(sr, 2), "100": s["100"], "50": s["50"],
+                    "4s": s["4s"], "6s": s["6s"], "span": f"{s['span_start'][:4]}-{s['span_end'][:4]}"
+                })
+        most_runs.sort(key=lambda x: x["runs"], reverse=True)
+        most_runs = most_runs[:200]
+
+        self.highest_scores_list.sort(key=lambda x: x["runs"], reverse=True)
+        highest_scores = self.highest_scores_list[:100]
+        
+        for m in self.fastest_milestones:
+            self.fastest_milestones[m].sort(key=lambda x: x["balls"])
+            self.fastest_milestones[m] = self.fastest_milestones[m][:50]
+            self.fastest_milestones_innings[m].sort(key=lambda x: x["innings"])
+            self.fastest_milestones_innings[m] = self.fastest_milestones_innings[m][:50]
+            
+        for m_key in self.innings_milestones["overall"]:
+            self.innings_milestones["overall"][m_key]["fastest"].sort(key=lambda x: x["balls"])
+            self.innings_milestones["overall"][m_key]["fastest"] = self.innings_milestones["overall"][m_key]["fastest"][:50]
+            s_list = sorted(self.innings_milestones["overall"][m_key]["fastest"], key=lambda x: x["balls"], reverse=True)
+            self.innings_milestones["overall"][m_key]["slowest"] = s_list[:50]
+
+        most_wickets_overall = []
+        for name, s in self.bowler_career_stats.items():
+            if s["wickets"] > 5:
+                most_wickets_overall.append({
+                    "name": name, "team": s["team"], "wickets": s["wickets"], "innings": s["innings"],
+                    "runs": s["runs"], "balls": s["balls"]
+                })
+        most_wickets_overall.sort(key=lambda x: x["wickets"], reverse=True)
+        most_wickets_overall = most_wickets_overall[:200]
+
+        self.best_figures_candidates.sort(key=lambda x: (x["wickets"], -x["runs"]), reverse=True)
+        best_figs_4 = [x for x in self.best_figures_candidates if x["wickets"] == 4][:50]
+        best_figs_5 = [x for x in self.best_figures_candidates if x["wickets"] >= 5][:50]
+
+        for phase in ["Powerplay", "Middle", "Death"]:
+            self.team_highs_candidates[phase].sort(key=lambda x: x["runs"], reverse=True)
+            self.final_phase_stats["team_innings_highs"][phase] = self.team_highs_candidates[phase][:50]
+            
+            self.batsman_phase_highs_candidates[phase].sort(key=lambda x: x["runs"], reverse=True)
+            self.final_phase_stats["batsman_innings_highs"][phase] = self.batsman_phase_highs_candidates[phase][:50]
+            
+            self.bowler_phase_best_candidates[phase].sort(key=lambda x: (x["value"], -x["runs"]), reverse=True)
+            self.final_phase_stats["bowler_innings_wickets"][phase] = self.bowler_phase_best_candidates[phase][:50]
+
+        # Prepare specific most_wickets dicts
+        most_wickets_for_team = {}
+        for team, players in self.bowler_team_stats.items():
+            most_wickets_for_team[team] = sorted([
+                {"name": n, "team": team, "wickets": s["wickets"], "innings": s["innings"], "runs": 0, "balls": 0} 
+                for n, s in players.items() if s["wickets"] > 0
+            ], key=lambda x: x["wickets"], reverse=True)[:50]
+
+        most_wickets_vs_team = {}
+        for team, players in self.bowler_vs_stats.items():
+            most_wickets_vs_team[team] = sorted([
+                 {"name": n, "team": team, "wickets": s["wickets"], "innings": s["innings"], "runs": 0, "balls": 0}
+                 for n, s in players.items() if s["wickets"] > 0
+            ], key=lambda x: x["wickets"], reverse=True)[:50]
+            
+        most_wickets_team_vs = {}
+        for team, opps in self.bowler_team_vs_stats.items():
+            most_wickets_team_vs[team] = {}
+            for opp, players in opps.items():
+                most_wickets_team_vs[team][opp] = sorted([
+                    {"name": n, "team": team, "wickets": s["wickets"], "innings": s["innings"], "runs": 0, "balls": 0}
+                    for n, s in players.items() if s["wickets"] > 0
+                ], key=lambda x: x["wickets"], reverse=True)[:50]
+
+        # Flatten innings_milestones for fastest_innings_milestones compatibility
+        fastest_innings_milestones_flat = {}
+        if "overall" in self.innings_milestones:
+            for m_key, m_data in self.innings_milestones["overall"].items():
+                if "fastest" in m_data:
+                    fastest_innings_milestones_flat[m_key] = m_data["fastest"]
+
+        return {
+            "most_runs": most_runs,
+            "most_runs_by_position": {k: v[:50] for k,v in self.most_runs_by_position.items()},
+            "fastest_milestones": self.fastest_milestones,
+            "fastest_milestones_innings": self.fastest_milestones_innings,
+            "highest_scores": highest_scores,
+            "innings_milestones": self.innings_milestones,
+            "fastest_innings_milestones": fastest_innings_milestones_flat, # Added key
+            "phase_stats": self.final_phase_stats,
+            "fastest_wickets": {
+                "overall": self.fastest_wickets_overall,
+                "for_team": {k: {mk: mv[:20] for mk, mv in v.items()} for k,v in self.fastest_wickets_team.items()}, 
+                "vs_team": {k: {mk: mv[:20] for mk, mv in v.items()} for k,v in self.fastest_wickets_vs.items()},
+                "team_vs": {t: {o: {mk: mv[:20] for mk, mv in v.items()} for o,v in t_d.items()} for t,t_d in self.fastest_wickets_team_vs.items()}
+            },
+            "best_figures": { "4_wickets": best_figs_4, "5_wickets": best_figs_5 },
+            "most_wickets": { 
+                "overall": most_wickets_overall,
+                "for_team": most_wickets_for_team,
+                "vs_team": most_wickets_vs_team,
+                "team_vs": most_wickets_team_vs
+            }, 
+            "most_hauls": {
+                "4w": sorted([{"name": n, "team": s["team"], "4w": s["4w"], "innings": s["innings"]} for n,s in self.bowler_career_stats.items() if s["4w"] > 0], key=lambda x: x["4w"], reverse=True)[:50],
+                "5w": sorted([{"name": n, "team": s["team"], "5w": s["5w"], "innings": s["innings"]} for n,s in self.bowler_career_stats.items() if s["5w"] > 0], key=lambda x: x["5w"], reverse=True)[:50]
+            }
+        }
+
+    def _check_innings_milestones(self, stats, date, milestone_key):
+            m_val = int(milestone_key)
+            if m_val in stats.get('milestone_balls', {}):
+                balls_faced = stats['milestone_balls'][m_val]
+                if milestone_key not in self.innings_milestones["overall"]: self.innings_milestones["overall"][milestone_key] = {"fastest": [], "slowest": []}
+                entry = { "name": stats["name"], "team": stats["team"], "opposition": stats["opposition"], "balls": balls_faced, "runs": stats["runs"], "date": date, "is_out": stats["is_out"] }
+                self.innings_milestones["overall"][milestone_key]["fastest"].append(entry)
+                
+                t = stats["team"]
+                if t not in self.innings_milestones["team"]: self.innings_milestones["team"][t] = {}
+                if milestone_key not in self.innings_milestones["team"][t]: self.innings_milestones["team"][t][milestone_key] = {"fastest": [], "slowest": []}
+                self.innings_milestones["team"][t][milestone_key]["fastest"].append(entry)
+                
+                o = stats["opposition"]
+                if o not in self.innings_milestones["vs"]: self.innings_milestones["vs"][o] = {}
+                if milestone_key not in self.innings_milestones["vs"][o]: self.innings_milestones["vs"][o][milestone_key] = {"fastest": [], "slowest": []}
+                self.innings_milestones["vs"][o][milestone_key]["fastest"].append(entry)
+
+    def _update_bowler_sub_stats(self, root_dict, key, name, wkt, date, mid):
+        if key not in root_dict: root_dict[key] = {}
+        p_dict = root_dict[key]
+        if name not in p_dict: p_dict[name] = { "wickets": 0, "innings": 0, "milestones": {} }
+        p = p_dict[name]
+        p["innings"] += 1
+        start_w = p["wickets"]
+        p["wickets"] += wkt
+        end_w = p["wickets"]
+        for wm in [50, 100, 150, 200]:
+            if start_w < wm and end_w >= wm:
+                if wm not in p["milestones"]:
+                    p["milestones"][wm] = { "innings": p["innings"], "date": date }
+
 def process_data():
     if not os.path.exists(EXTRACT_DIR):
         print("Data directory not found.")
         return
 
     print(f"Scanning {EXTRACT_DIR} for CSVs...")
-    
     all_files = [f for f in os.listdir(EXTRACT_DIR) if f.endswith('.csv') and not f.endswith('_info.csv')]
     
     if not all_files:
@@ -100,15 +435,12 @@ def process_data():
         return
         
     print(f"Found {len(all_files)} match files. Loading data...")
-
     # Load match outcomes
     match_outcomes = get_match_outcomes(EXTRACT_DIR)
+    match_info = load_match_info(EXTRACT_DIR)
 
     # Load data into memory
     data_rows = []
-    
-    # Headers expected in Cricsheet csv2:
-    # match_id,season,start_date,venue,innings,ball,batting_team,bowling_team,striker,non_striker,bowler,runs_off_bat,extras,wides,noballs,byes,legbyes,penalty,wicket_type,player_dismissed,other_wicket_type,other_player_dismissed
     
     for i, csv_file in enumerate(all_files):
         if i % 100 == 0:
@@ -117,14 +449,11 @@ def process_data():
         file_path = os.path.join(EXTRACT_DIR, csv_file)
         with open(file_path, 'r', encoding='utf-8') as f:
             reader = csv.DictReader(f)
-            # The header is in every file. DictReader handles it.
             for row in reader:
                 data_rows.append(row)
     
     print(f"\nLoaded {len(data_rows)} rows. Sorting...")
     
-    # Sort by date, match_id, innings, ball
-    # Helper for sorting
     def sort_key(row):
         d = parse_date(row.get('start_date', ''))
         m = row.get('match_id', '')
@@ -135,994 +464,189 @@ def process_data():
     data_rows.sort(key=sort_key)
     
     print("Calculating stats...")
-    
-    players = {} 
-    # Structure: 
-    # { 
-    #   name: { 
-    #       team: "India", 
-    #       runs: 0, 
-    #       balls: 0, 
-    #       innings: 0,
-    #       last_match: None,
-    #       cum_runs: 0, 
-    #       milestones_balls: {1000: balls_faced_at_crossing, ...},
-    #       milestones_innings: {1000: innings_at_crossing, ...}
-    #   } 
-    # }
 
-    milestones = [1000, 2000, 3000, 4000, 5000]
-    innings_milestones = [50, 100, 150, 200]
-
-    # Phase Definitions
-    def get_phase(ball_val):
-        over = int(ball_val)
-        if over < 6:
-            return "Powerplay"
-        elif over < 16: # 6 to 15.99 (Overs 7-16)
-            return "Middle"
-        else: # 16+ (Overs 17-20)
-            return "Death"
-
-    phase_stats = {
-        "Powerplay": {"batsmen": {}, "bowlers": {}},
-        "Middle": {"batsmen": {}, "bowlers": {}},
-        "Death": {"batsmen": {}, "bowlers": {}}
+    # Init Contexts
+    contexts = {
+        'all': StatsContext('all'),
+        'wc': StatsContext('wc')
     }
+
     
-    # helper to init phase player
-    def init_phase_player(phase, role, name, team):
-        if name not in phase_stats[phase][role]:
-            phase_stats[phase][role][name] = {
-                "name": name,
-                "team": team,
-                "value": 0, # Runs or Wickets
-                "balls": 0
-            }
+    VALID_WC_YEARS = ['2007', '2009', '2010', '2012', '2014', '2016', '2021', '2022', '2024']
+
+    def is_world_cup(event_name):
+        if not event_name: return False
+        ev = event_name.lower()
+        if "qualifier" in ev: return False
+        return "world cup" in ev or "world t20" in ev or "world twenty20" in ev
+
+    current_match_id = None
+    innings_stats = {} 
+    bowler_innings_stats = {} 
+    team_innings_stats = { "Powerplay": {"runs":0, "wickets":0, "balls":0, "team": "", "opposition": ""}, 
+                           "Middle": {"runs":0, "wickets":0, "balls":0, "team": "", "opposition": ""}, 
+                           "Death": {"runs":0, "wickets":0, "balls":0, "team": "", "opposition": ""} }
+    current_match_date = ""
+    current_match_info = {}
 
     for row in data_rows:
-        striker = row.get('striker')
-        bowler = row.get('bowler')
-        runs = int(row.get('runs_off_bat', 0))
-        extras = int(row.get('extras', 0))
-        wides = int(row.get('wides', 0)) if row.get('wides') else 0
-        noballs = int(row.get('noballs', 0)) if row.get('noballs') else 0
-        # For bowler runs conceded: runs_off_bat + wides + noballs. (Byes/Legbyes don't count to bowler)
-        bowler_runs = runs + wides + noballs
+        mid = row['match_id']
+        match_date = row['start_date']
         
-        match_id = row.get('match_id')
-        team = row.get('batting_team')
-        # Bowling team is opposite
-        bowling_team = row.get('bowling_team')
-        
-        ball_val = float(row.get('ball', 0)) if row.get('ball', '').replace('.', '', 1).isdigit() else 0.0
-        phase = get_phase(ball_val)
-
-        if striker not in players:
-            players[striker] = {
-                "name": striker,
-                "team": team, 
-                "runs": 0,
-                "balls": 0,
-                "innings": 0,
-                "last_match": None,
-                "milestone_balls": {},
-                "milestone_innings": {}
-            }
-        
-        # Check for new innings
-        if players[striker]['last_match'] != match_id:
-            players[striker]['innings'] += 1
-            players[striker]['last_match'] = match_id
-
-        # Update run count
-        players[striker]['runs'] += runs
-        
-        # Update ball count: Ball is legal if wides == 0
-        if wides == 0:
-            players[striker]['balls'] += 1
-            
-        # --- PHASE STATS (CAREER) ---
-        # 1. Batsman Runs
-        init_phase_player(phase, "batsmen", striker, team)
-        phase_stats[phase]["batsmen"][striker]["value"] += runs
-        if wides == 0:
-             phase_stats[phase]["batsmen"][striker]["balls"] += 1
-             
-        # 2. Bowler Wickets
-        # Wicket logic: 'player_dismissed' exists and 'wicket_type' is not run out (usually).
-        # But 'wicket_type' field is available in dict lookup.
-        dismissal = row.get('wicket_type')
-        if dismissal and dismissal not in ["run out", "retired hurt", "retired out", "obstructing the field", "timed out"]:
-            # Credit to bowler
-            init_phase_player(phase, "bowlers", bowler, bowling_team)
-            phase_stats[phase]["bowlers"][bowler]["value"] += 1
-            
-        # Also limit bowler update to valid balls for ball count? Bowlers don't strictly need ball counts for "Most Wickets" but good for economy.
-        # Let's just track wickets for now as requested. 
-
-        # --- END PHASE STATS ---
-
-        # Check Milestones
-        current_runs = players[striker]['runs']
-        current_balls = players[striker]['balls']
-        current_innings = players[striker]['innings']
-        
-        # Team update (keep latest)
-        players[striker]['team'] = team
-        
-        for m in milestones:
-            if current_runs >= m:
-                if m not in players[striker]['milestone_balls']:
-                    players[striker]['milestone_balls'][m] = current_balls
-                if m not in players[striker]['milestone_innings']:
-                    players[striker]['milestone_innings'][m] = current_innings
-
-    # 1.5 Calculate Highest Scores (Innings based) & Team Phase Highs
-    # We need to re-iterate or process differently to get per-innings score. 
-    # Since we sorted by match/date, we can track current innings stats.
-    
-    print("Calculating highest scores and team phase stats...")
-    innings_stats = {} # Key: (match_id, striker) -> {runs, balls, team, date, is_out, position}
-    
-    # Team Phase Tracking
-    # Key: (match_id, innings) -> { "Powerplay": runs, "Middle": runs, "Death": runs, "Team": team, "Date": date, "Opposition": ... }
-    team_innings_stats = {} 
-    
-    # Bowler Innings Phase Tracking
-    # Key: (match_id, bowler) -> { name, team, opposition, date, phases: {Powerplay: {w, r}, ...} }
-    bowler_innings_stats = {}
-
-    # Checkpoint variables for batting order tracking
-    current_match_innings = None
-    batters_seen = []
-    
-    # --- BOWLING STATS TRACKING ---
-    # Global tracking for milestones (Fastest to 50, 100, etc.)
-    # Structure: name -> {innings: X, wickets: Y, milestones: {50: {innings: I, date: D}, ...}}
-    bowler_career_stats = {} 
-    
-    # Split by Team (Fastest for Team X)
-    bowler_team_stats = {} # Team -> Bowler -> Stats
-    
-    # Split by Opposition (Fastest vs Team Y)
-    bowler_vs_stats = {} # Opposition -> Bowler -> Stats
-
-    # Split by Team vs Opposition (Fastest for Team X vs Team Y)
-    bowler_team_vs_stats = {} # Team -> Opposition -> Bowler -> Stats
-    
-    # Best Figures Tracking
-    # List of {name, team, opposition, wickets, runs, balls, date, venue}
-    best_figures_candidates = []
-    
-    # Wicket Milestones to track
-    wicket_milestones = [50, 100, 150, 200, 250, 300]
-    
-    def init_bowler_stats(stats_dict, name):
-        if name not in stats_dict:
-            stats_dict[name] = {
-                "innings": 0,
-                "wickets": 0,
-                "milestones": {}
-            }
-
-    for row in data_rows:
-        mid = row.get('match_id')
-        striker = row.get('striker')
-        bowler = row.get('bowler')
-        non_striker = row.get('non_striker')
-        runs = int(row.get('runs_off_bat', 0))
-        extras = int(row.get('extras', 0)) # Team score includes extras
-        wides = int(row.get('wides', 0)) if row.get('wides') else 0
-        noballs = int(row.get('noballs', 0)) if row.get('noballs') else 0
-        date = row.get('start_date')
-        team = row.get('batting_team')
-        opposition = row.get('bowling_team')
-        player_dismissed = row.get('player_dismissed')
-        wicket_type = row.get('wicket_type')
-        ball_val = float(row.get('ball', 0)) if row.get('ball', '').replace('.', '', 1).isdigit() else 0.0
-        
-        innings_num = row.get('innings')
-        mi_key = (mid, innings_num)
-        
-        if mi_key != current_match_innings:
-            # End of previous innings - Process Bowler Innings for Best Figures & Increment Innings Count
-            if current_match_innings:
-                # We need to process the bowlers from the previous innings *before* moving on.
-                # However, since we iterate row by row, 'bowler_innings_stats' populates gradually.
-                # We can't know if an innings is truly done until the key changes.
-                # But 'bowler_innings_stats' key is (match_id, bowler).
-                # We can construct the set of bowlers for the current_match_innings and flush them.
-                pass 
+        if mid != current_match_id:
+            if current_match_id is not None:
+                active_contexts = [contexts['all']]
+                event = current_match_info.get('event', '')
                 
-            current_match_innings = mi_key
-            batters_seen = []
-            
-            # Note: We need a reliable way to update Bowler Career Innings count.
-            # Best way: Track (Bowler, MatchID) pairs relative to career.
-            # When we see a verified legal delivery or wicket for a bowler in a new match, we increment innings?
-            # Or just increment stats at the end of the file processing? 
-            # Current structure iterates rows. Let's update Career Stats incrementally but handle "Innings Count" carefuly.
-            # Actually, easiest is: Keep a `bowler_last_match` map like for batters.
-            
-        # Helper to update career stats
-        def update_bowler_career(b_name, b_team, b_opp, wkt, is_new_match):
-            # Overall
-            init_bowler_stats(bowler_career_stats, b_name)
-            if is_new_match: bowler_career_stats[b_name]["innings"] += 1
-            start_w = bowler_career_stats[b_name]["wickets"]
-            bowler_career_stats[b_name]["wickets"] += wkt
-            end_w = bowler_career_stats[b_name]["wickets"]
-            
-            # Check Milestones (Overall)
-            for wm in wicket_milestones:
-                if start_w < wm and end_w >= wm:
-                    if wm not in bowler_career_stats[b_name]["milestones"]:
-                        bowler_career_stats[b_name]["milestones"][wm] = {
-                            "innings": bowler_career_stats[b_name]["innings"],
-                            "date": date,
-                            "team": b_team, # Current team
-                            "match_id": mid
-                        }
-
-            # For Team
-            if b_team not in bowler_team_stats: bowler_team_stats[b_team] = {}
-            init_bowler_stats(bowler_team_stats[b_team], b_name)
-            if is_new_match: bowler_team_stats[b_team][b_name]["innings"] += 1
-            start_w_t = bowler_team_stats[b_team][b_name]["wickets"]
-            bowler_team_stats[b_team][b_name]["wickets"] += wkt
-            end_w_t = bowler_team_stats[b_team][b_name]["wickets"]
-            
-            # Check Milestones (For Team)
-            for wm in wicket_milestones:
-                if start_w_t < wm and end_w_t >= wm:
-                    if wm not in bowler_team_stats[b_team][b_name]["milestones"]:
-                        bowler_team_stats[b_team][b_name]["milestones"][wm] = {
-                            "innings": bowler_team_stats[b_team][b_name]["innings"],
-                            "date": date,
-                            "match_id": mid
-                        }
-
-            # Vs Opposition
-            if b_opp not in bowler_vs_stats: bowler_vs_stats[b_opp] = {}
-            init_bowler_stats(bowler_vs_stats[b_opp], b_name)
-            if is_new_match: bowler_vs_stats[b_opp][b_name]["innings"] += 1
-            start_w_v = bowler_vs_stats[b_opp][b_name]["wickets"]
-            bowler_vs_stats[b_opp][b_name]["wickets"] += wkt
-            end_w_v = bowler_vs_stats[b_opp][b_name]["wickets"]
-            
-            # Check Milestones (Vs Opposition)
-            for wm in wicket_milestones:
-                if start_w_v < wm and end_w_v >= wm:
-                    if wm not in bowler_vs_stats[b_opp][b_name]["milestones"]:
-                        bowler_vs_stats[b_opp][b_name]["milestones"][wm] = {
-                            "innings": bowler_vs_stats[b_opp][b_name]["innings"],
-                            "date": date,
-                            "match_id": mid
-                        }
-
-            # Team Vs Opposition (New)
-            # Structure: bowler_team_vs_stats[Team][Opposition][Player]
-            if b_team not in bowler_team_vs_stats: bowler_team_vs_stats[b_team] = {}
-            if b_opp not in bowler_team_vs_stats[b_team]: bowler_team_vs_stats[b_team][b_opp] = {}
-            
-            init_bowler_stats(bowler_team_vs_stats[b_team][b_opp], b_name)
-            if is_new_match: bowler_team_vs_stats[b_team][b_opp][b_name]["innings"] += 1
-            
-            start_w_tv = bowler_team_vs_stats[b_team][b_opp][b_name]["wickets"]
-            bowler_team_vs_stats[b_team][b_opp][b_name]["wickets"] += wkt
-            end_w_tv = bowler_team_vs_stats[b_team][b_opp][b_name]["wickets"]
-             
-            for wm in wicket_milestones:
-                if start_w_tv < wm and end_w_tv >= wm:
-                    if wm not in bowler_team_vs_stats[b_team][b_opp][b_name]["milestones"]:
-                        bowler_team_vs_stats[b_team][b_opp][b_name]["milestones"][wm] = {
-                            "innings": bowler_team_vs_stats[b_team][b_opp][b_name]["innings"],
-                            "date": date,
-                            "match_id": mid
-                        }
-            
-        # Init Team Innings Stat
-        if mi_key not in team_innings_stats:
-            team_innings_stats[mi_key] = {
-                "team": team,
-                "opposition": opposition,
-                "date": date,
-                "venue": row.get('venue'),
-                "Powerplay": {"runs": 0, "wickets": 0, "balls": 0},
-                "Middle": {"runs": 0, "wickets": 0, "balls": 0},
-                "Death": {"runs": 0, "wickets": 0, "balls": 0}
-            }
-            
-        # Update Team Phase Score
-        phase = get_phase(ball_val)
-        team_innings_stats[mi_key][phase]["runs"] += (runs + extras)
-        if player_dismissed:
-             team_innings_stats[mi_key][phase]["wickets"] += 1
-        if wides == 0 and noballs == 0:
-             team_innings_stats[mi_key][phase]["balls"] += 1
-        
-        # Add batters if seen for the first time in this innings
-        if striker not in batters_seen:
-            batters_seen.append(striker)
-        if non_striker not in batters_seen:
-            batters_seen.append(non_striker)
-            
-        # Helper to get position string
-        def get_position_str(player, b_list):
-            try:
-                idx = b_list.index(player)
-                if idx < 2:
-                    return "Opener"
-                else:
-                    return str(idx + 1)
-            except ValueError:
-                return "N/A" # Should not happen
-
-        key = (mid, striker)
-        if key not in innings_stats:
-            pos = get_position_str(striker, batters_seen)
-            innings_stats[key] = {
-                "name": striker,
-                "team": team,
-                "venue": row.get('venue'),
-                "opposition": row.get('bowling_team'),
-                "runs": 0,
-                "balls": 0,
-                "date": date,
-                "is_out": False,
-                "milestones": {},
-                "position": pos,
-                "phases": {"Powerplay": {"runs": 0, "balls": 0}, "Middle": {"runs": 0, "balls": 0}, "Death": {"runs": 0, "balls": 0}}
-            }
-            
-        # Update Batsman Phase Stats
-        innings_stats[key]['phases'][phase]["runs"] += runs
-        if wides == 0:
-             innings_stats[key]['phases'][phase]["balls"] += 1
-
-        current_runs = innings_stats[key]['runs']
-        innings_stats[key]['runs'] += runs
-        if wides == 0:
-            innings_stats[key]['balls'] += 1
-            
-        new_runs = innings_stats[key]['runs']
-        current_balls = innings_stats[key]['balls']
-        
-        # Bowler Phase Stats
-        b_key = (mid, bowler)
-        is_new_bowler_innings = False
-        
-        if b_key not in bowler_innings_stats:
-            is_new_bowler_innings = True
-            bowler_innings_stats[b_key] = {
-                "name": bowler,
-                "team": opposition, # Bowler belongs to bowling team
-                "opposition": team,    # Bowling AGAINST batting team
-                "date": date,
-                "venue": row.get('venue'),
-                "phases": {
-                    "Powerplay": {"w": 0, "r": 0},
-                    "Middle": {"w": 0, "r": 0},
-                    "Death": {"w": 0, "r": 0}
-                },
-                "total_wickets": 0,
-                "total_runs": 0,
-                "total_balls": 0
-            }
-            
-        # Update Bowler Phase Stats
-        run_conceded = (runs + wides + noballs)
-        bowler_innings_stats[b_key]["phases"][phase]["r"] += run_conceded
-        
-        # Total Stats for Best Figures
-        bowler_innings_stats[b_key]["total_runs"] += run_conceded
-        if wides == 0 and noballs == 0:
-             bowler_innings_stats[b_key]["total_balls"] += 1
-        
-        # Wicket Check
-        is_wicket = 0
-        dismissal = row.get('wicket_type')
-        if player_dismissed and dismissal not in ["run out", "retired hurt", "retired out", "obstructing the field", "timed out"]:
-            bowler_innings_stats[b_key]["phases"][phase]["w"] += 1
-            bowler_innings_stats[b_key]["total_wickets"] += 1
-            is_wicket = 1
-            
-        # Update Career Stats
-        update_bowler_career(bowler, opposition, team, is_wicket, is_new_bowler_innings)
-
-
-
-        
-        for m in innings_milestones:
-            if current_runs < m and new_runs >= m:
-                # Record the ball count when they reached the milestone
-                if m not in innings_stats[key]['milestones']:
-                     innings_stats[key]['milestones'][m] = current_balls
-        if player_dismissed and player_dismissed == striker:
-            innings_stats[key]['is_out'] = True
-
-    
-    # --- POST PROCESSING ADVANCED BOWLING STATS ---
-    print("Processing advanced bowling stats...")
-    
-    # 1. Best Bowling Figures
-    best_figures_4 = []
-    best_figures_5 = []
-    
-    for b_key, stats in bowler_innings_stats.items():
-        wkts = stats["total_wickets"]
-        if wkts >= 4:
-            entry = {
-                "name": stats["name"],
-                "team": stats["team"],
-                "opposition": stats["opposition"],
-                "venue": stats["venue"],
-                "date": stats["date"],
-                "wickets": wkts,
-                "runs": stats["total_runs"],
-                "balls": stats["total_balls"]
-            }
-            if wkts >= 5:
-                best_figures_5.append(entry)
-            # Add to 4-fer list as well? Usually distinct lists. 
-            # Request says "Fastest 5-wicket and 4-wickets". 
-            # Let's keep them as separate lists containing exactly that count or more.
-            # Actually, a 5-for is also a 4-for technically, but usually lists are exclusive or threshold based.
-            # Let's add to both if 5+, effectively "4+ Wickets" list and "5+ Wickets" list.
-            best_figures_4.append(entry)
-            
-    # Sort Best Figures: Wickets DESC, Balls ASC, Runs ASC, Date DESC
-    def figures_sort_key(x):
-        return (-x["wickets"], x["balls"], x["runs"], parse_date(x["date"])) # Date desc? No, usually earlier record holds precedence if tied? Or recent?
-        # User said: "Fewest Balls -> Fewest Runs -> Date (Most Recent)"
-        # Implicitly Wickets is primary.
-        # So: (-wickets, balls, runs, -timestamp)
-    
-    best_figures_4.sort(key=lambda x: (-x["wickets"], x["balls"], x["runs"], -parse_date(x["date"]).timestamp()))
-    best_figures_5.sort(key=lambda x: (-x["wickets"], x["balls"], x["runs"], -parse_date(x["date"]).timestamp()))
-
-    # 2. Fastest to Wickets (Formatting)
-    # Helper to format milestone list
-    def format_milestone_list(stats_dict):
-        # Result: { 50: [ {name, innings, date, ...}, ... ], 100: ... }
-        # Or for Team/Vs: { "India": { 50: [...] } }
-        
-        # We need a generic way to extract.
-        # stats_dict map: Key (Name) -> {milestones: {50: ...}}
-        
-        # Output format for "Overall": {50: [...sorted...], 100: ...}
-        output = {}
-        for m in wicket_milestones:
-            output[m] = []
-            
-        for name, data in stats_dict.items():
-            for m, m_data in data["milestones"].items():
-                if m in output:
-                    output[m].append({
-                        "name": name,
-                        "innings": m_data["innings"],
-                        "date": m_data["date"],
-                        "match_id": m_data.get("match_id"),
-                        "team": m_data.get("team", data.get("team", "")) # Fallback if team not in milestone
-                    })
-                    
-        # Sort each milestone list by Innings (ASC), then Date (ASC)
-        for m in output:
-            output[m].sort(key=lambda x: (x["innings"], parse_date(x["date"]).timestamp()))
-            
-        return output
-
-    fastest_wickets_overall = format_milestone_list(bowler_career_stats)
-    
-    # For Team (Dict of Dicts)
-    fastest_wickets_team = {}
-    for team, b_stats in bowler_team_stats.items():
-        fastest_wickets_team[team] = format_milestone_list(b_stats)
-
-    # Vs Opposition (Dict of Dicts)
-    fastest_wickets_vs = {}
-    for opp, b_stats in bowler_vs_stats.items():
-        fastest_wickets_vs[opp] = format_milestone_list(b_stats)
-
-    # Team Vs Opposition (Dict of Dicts of Dicts)
-    # Result: Team -> Opposition -> { 50: [...], 100: [...] }
-    fastest_wickets_team_vs = {}
-    for team, opp_dict in bowler_team_vs_stats.items():
-        fastest_wickets_team_vs[team] = {}
-        for opp, b_stats in opp_dict.items():
-             fastest_wickets_team_vs[team][opp] = format_milestone_list(b_stats)
-
-
-    # 3. Most Wickets & Haul Counts (New Requirement)
-    # Re-process bowler_innings_stats to aggregate these since career stats didn't track hauls fully matched to innings counts logic (though it could have).
-    # We want Lists for:
-    # - Most Wickets (Overall, For Team, Vs Opp)
-    # - Most 4w Hauls, Most 5w Hauls
-    
-    # helper for aggregation
-    def aggregate_bowling_records(group_key_func):
-        # group_key_func(stats) -> returns key to group by (e.g. "BowlerName" or "Bowler+Team")
-        # We need to accumulate: Wickets, Runs, Balls, Innings, 4w, 5w
-        
-        agg = {}
-        for b_key, stats in bowler_innings_stats.items():
-            # b_key = (match_id, bowler_name)
-            # stats has: name, team, opposition, total_wickets, total_runs, total_balls
-            
-            group_keys = group_key_func(stats) 
-            if not isinstance(group_keys, list):
-                group_keys = [group_keys]
+                # Check year first
+                year = ""
+                if current_match_date and len(current_match_date) >= 4:
+                     year = current_match_date[:4]
                 
-            for k in group_keys:
-                if not k: continue
-                if k not in agg:
-                    agg[k] = {
-                        "name": stats["name"],
-                        "team": stats["team"], # Might be ambiguous if aggregated across teams
-                        "wickets": 0,
-                        "runs": 0,
-                        "balls": 0,
-                        "innings": 0,
-                        "4w": 0,
-                        "5w": 0,
-                        "span_start": stats["date"],
-                        "span_end": stats["date"]
-                    }
-                
-                rec = agg[k]
-                rec["wickets"] += stats["total_wickets"]
-                rec["runs"] += stats["total_runs"]
-                rec["balls"] += stats["total_balls"]
-                rec["innings"] += 1
-                if stats["total_wickets"] >= 4:
-                    rec["4w"] += 1
-                if stats["total_wickets"] >= 5:
-                    rec["5w"] += 1
-                    
-                # Update Span (basic lex compare works for ISO dates yyyy-mm-dd)
-                if stats["date"] < rec["span_start"]: rec["span_start"] = stats["date"]
-                if stats["date"] > rec["span_end"]: rec["span_end"] = stats["date"]
-                
-        return agg
+                if is_world_cup(event) and year in VALID_WC_YEARS:
+                    active_contexts.append(contexts['wc'])
+                    wc_key = f"wc_{year}"
+                    if wc_key not in contexts: contexts[wc_key] = StatsContext(wc_key)
+                    active_contexts.append(contexts[wc_key])
 
-    # Overall
-    most_wickets_overall_dict = aggregate_bowling_records(lambda x: x["name"])
-    most_wickets_overall = list(most_wickets_overall_dict.values())
-    most_wickets_overall.sort(key=lambda x: x["wickets"], reverse=True)
-    
-    # For Team
-    most_wickets_team_dict = {} # Key: TeamName -> List of Players
-    # We aggregate by (Team, Name) to separate stats if players played for multiple teams
-    agg_team = aggregate_bowling_records(lambda x: (x["team"], x["name"]))
-    
-    # Convert to nested structure: { "India": [Player1, Player2...] }
-    temp_team_lists = {}
-    for k, rec in agg_team.items():
-        team_name, p_name = k
-        if team_name not in temp_team_lists: temp_team_lists[team_name] = []
-        temp_team_lists[team_name].append(rec)
+                for ctx in active_contexts:
+                    ctx.process_match(innings_stats, bowler_innings_stats, team_innings_stats, current_match_id, current_match_date, current_match_info)
+
+            current_match_id = mid
+            current_match_date = match_date
+            current_match_info = match_info.get(mid, {})
+            innings_stats = {}
+            bowler_innings_stats = {}
+            team_innings_stats = { "Powerplay": {"runs":0, "wickets":0, "balls":0, "team": "", "opposition": ""}, 
+                                   "Middle": {"runs":0, "wickets":0, "balls":0, "team": "", "opposition": ""}, 
+                                   "Death": {"runs":0, "wickets":0, "balls":0, "team": "", "opposition": ""} }
+
+        innings = int(row['innings'])
+        if innings > 2: continue 
         
-    for t in temp_team_lists:
-        temp_team_lists[t].sort(key=lambda x: x["wickets"], reverse=True)
-    most_wickets_team = temp_team_lists
-
-    # Vs Opposition
-    most_wickets_vs_dict = {}
-    agg_vs = aggregate_bowling_records(lambda x: (x["opposition"], x["name"]))
-    
-    temp_vs_lists = {}
-    for k, rec in agg_vs.items():
-        opp_name, p_name = k
-        if opp_name not in temp_vs_lists: temp_vs_lists[opp_name] = []
-        # For Vs lists, "team" field is player's team. If mixed, use last or list? 
-        # Usually displayed as "Player (Country)".
-        temp_vs_lists[opp_name].append(rec)
-
-    for t in temp_vs_lists:
-        temp_vs_lists[t].sort(key=lambda x: x["wickets"], reverse=True)
-    most_wickets_vs = temp_vs_lists
-
-    # Team Vs Opposition (Most Wickets)
-    # Structure: Team -> Opposition -> List
-    most_wickets_team_vs = {}
-    agg_team_vs = aggregate_bowling_records(lambda x: (x["team"], x["opposition"], x["name"]))
-    
-    temp_team_vs_lists = {}
-    for k, rec in agg_team_vs.items():
-        team_name, opp_name, p_name = k
-        if team_name not in temp_team_vs_lists: temp_team_vs_lists[team_name] = {}
-        if opp_name not in temp_team_vs_lists[team_name]: temp_team_vs_lists[team_name][opp_name] = []
-        temp_team_vs_lists[team_name][opp_name].append(rec)
+        batting_team = row['batting_team']
+        bowling_team = row['bowling_team']
+        striker = row['striker']
+        bowler = row['bowler']
+        runs_off_bat = int(row['runs_off_bat'])
+        extras = int(row['extras'])
+        total_runs = runs_off_bat + extras
+        ball = float(row['ball'])
+        phase = get_phase(ball)
         
-    for t in temp_team_vs_lists:
-        for o in temp_team_vs_lists[t]:
-             temp_team_vs_lists[t][o].sort(key=lambda x: x["wickets"], reverse=True)
-    most_wickets_team_vs = temp_team_vs_lists
-    
-    # Most 4w/5w Hauls (Overall List)
-    # Simply sort the overall list by hauls
-    most_4w_hauls = sorted([p for p in most_wickets_overall if p["4w"] > 0], key=lambda x: x["4w"], reverse=True)
-    most_5w_hauls = sorted([p for p in most_wickets_overall if p["5w"] > 0], key=lambda x: x["5w"], reverse=True)
-
-
-    
-    print("Formatting output...")
-    # Prepare Data JSON
-    output_data = {
-        "last_updated": datetime.datetime.now().strftime("%Y-%m-%d"),
-        "players": players,
-        "innings_stats": [v for k, v in innings_stats.items()], # Convert dict to list
-        "team_innings_stats": [v for k, v in team_innings_stats.items()],
-        "phase_stats": phase_stats,
+        if team_innings_stats[phase]["team"] == "":
+            team_innings_stats[phase]["team"] = batting_team
+            team_innings_stats[phase]["opposition"] = bowling_team
         
-        # New Stats
-        "fastest_wickets": {
-            "overall": fastest_wickets_overall,
-            "for_team": fastest_wickets_team,
-            "vs_team": fastest_wickets_vs
-        },
-        "best_figures": {
-            "4_wickets": best_figures_4,
-            "5_wickets": best_figures_5
-        },
-        "innings_milestones": {} # Placeholder, populated below
-    }
-
-    # --- NEW: INNINGS MILESTONES (Fastest/Slowest 50/100) ---
-    print("Processing innings milestones...")
-    
-    # We need to extract milestones from 'innings_stats'
-    # entry structure in innings_stats: 
-    # {name, team, opposition, runs, balls, date, milestones: {50: balls, 100: balls, ...}}
-    
-    # Containers
-    milestone_records = {
-        50: [],
-        100: []
-    }
-    
-    for key, stats in innings_stats.items():
-        for m_val, balls_faced in stats['milestones'].items():
-            if m_val in milestone_records:
-                milestone_records[m_val].append({
-                    "name": stats["name"],
-                    "team": stats["team"],
-                    "opposition": stats["opposition"],
-                    "venue": stats["venue"],
-                    "date": stats["date"],
-                    "balls": balls_faced,
-                    "runs": stats["runs"], # Final runs in that innings
-                    "is_out": stats["is_out"]
-                })
-
-    # Helper to sort and group
-    def process_milestone_group(records):
-        # Sort Fastest: Balls ASC, Date ASC
-        fastest = sorted(records, key=lambda x: (x["balls"], parse_date(x["date"]).timestamp()))
-        # Sort Slowest: Balls DESC, Date ASC
-        slowest = sorted(records, key=lambda x: (-x["balls"], parse_date(x["date"]).timestamp()))
-        return {"fastest": fastest, "slowest": slowest}
-
-    # 1. Overall
-    im_overall = {}
-    for m in [50, 100]:
-        im_overall[str(m)] = process_milestone_group(milestone_records[m])
-
-    # 2. By Team
-    im_team = {} # { "India": { "50": {fastest, slowest}, ... } }
-    # Group records by team first
-    team_map_50 = {} # Team -> List
-    team_map_100 = {}
-    
-    for rec in milestone_records[50]:
-        t = rec["team"]
-        if t not in team_map_50: team_map_50[t] = []
-        team_map_50[t].append(rec)
-        
-    for rec in milestone_records[100]:
-        t = rec["team"]
-        if t not in team_map_100: team_map_100[t] = []
-        team_map_100[t].append(rec)
-        
-    # Process attributes for all teams found in either map
-    all_teams = set(list(team_map_50.keys()) + list(team_map_100.keys()))
-    for t in all_teams:
-        im_team[t] = {}
-        im_team[t]["50"] = process_milestone_group(team_map_50.get(t, []))
-        im_team[t]["100"] = process_milestone_group(team_map_100.get(t, []))
-
-    # 3. Vs Opposition
-    im_vs = {} # { "Australia": { "50": {fastest, slowest}, ... } }
-    vs_map_50 = {}
-    vs_map_100 = {}
-    
-    for rec in milestone_records[50]:
-        o = rec["opposition"]
-        if o not in vs_map_50: vs_map_50[o] = []
-        vs_map_50[o].append(rec)
-        
-    for rec in milestone_records[100]:
-        o = rec["opposition"]
-        if o not in vs_map_100: vs_map_100[o] = []
-        vs_map_100[o].append(rec)
-        
-    all_opps = set(list(vs_map_50.keys()) + list(vs_map_100.keys()))
-    for o in all_opps:
-        im_vs[o] = {}
-        im_vs[o]["50"] = process_milestone_group(vs_map_50.get(o, []))
-        im_vs[o]["100"] = process_milestone_group(vs_map_100.get(o, []))
-
-    # Assign to output
-    output_data["innings_milestones"] = {
-        "overall": im_overall,
-        "team": im_team,
-        "vs": im_vs
-    }
-    # Key: Position -> { PlayerName -> {runs, balls, innings} }
-    position_stats = {} 
-    
-    for key, stats in innings_stats.items():
-        pos = stats['position']
-        name = stats['name']
-        team = stats['team']
-        runs = stats['runs']
-        balls = stats['balls']
-        
-        if pos not in position_stats:
-            position_stats[pos] = {}
-        
-        if name not in position_stats[pos]:
-            position_stats[pos][name] = {
-                "name": name,
-                "team": team,
-                "runs": 0,
-                "balls": 0,
-                "innings": 0
+        if striker not in innings_stats:
+            innings_stats[striker] = {
+                "name": striker, "team": batting_team, "opposition": bowling_team,
+                "runs": 0, "balls": 0, "4s": 0, "6s": 0, "is_out": False, 
+                "phases": {"Powerplay": {"runs":0, "balls":0}, "Middle": {"runs":0, "balls":0}, "Death": {"runs":0, "balls":0}},
+                "venue": current_match_info.get('venue', ''), "milestone_balls": {}
             }
+        
+        p_stats = innings_stats[striker]
+        p_stats["runs"] += runs_off_bat
+        is_wide = False
+        try:
+             if int(row.get('wides', 0)) > 0: is_wide = True
+        except: pass
+        
+        if not is_wide:
+            p_stats["balls"] += 1
+            p_stats["phases"][phase]["balls"] += 1
             
-        position_stats[pos][name]['runs'] += runs
-        position_stats[pos][name]['balls'] += balls
-        position_stats[pos][name]['innings'] += 1
-
-    # Convert to list and sort
-    most_runs_by_position = {}
-    for pos, players_dict in position_stats.items():
-        p_list = list(players_dict.values())
-        p_list.sort(key=lambda x: x['runs'], reverse=True)
-        most_runs_by_position[pos] = p_list[:50] # Top 50 per position
-
-
-    # 1. Most Runs
-    # Convert dict to list
-    all_players = list(players.values())
-    all_players.sort(key=lambda x: x['runs'], reverse=True)
-    
-    most_runs_list = []
-    for p in all_players[:50]: # Top 50
-        most_runs_list.append({
-            "name": p['name'],
-            "team": p['team'],
-            "runs": p['runs'],
-            "balls": p['balls'],
-            "innings": p['innings']
-        })
+        p_stats["phases"][phase]["runs"] += runs_off_bat
+        if runs_off_bat == 4: p_stats["4s"] += 1
+        if runs_off_bat == 6: p_stats["6s"] += 1
         
-    # 2. Fastest to Milestones (Balls)
-    fastest_milestones = {}
-    
-    for m in milestones:
-        # Filter players who reached this milestone
-        reached = [p for p in all_players if m in p['milestone_balls']]
-        # Sort by balls taken to reach it
-        reached.sort(key=lambda x: x['milestone_balls'][m])
+        if "position" not in p_stats:
+             teammates_count = len([s for s in innings_stats.values() if s['team'] == batting_team and "position" in s])
+             p_stats["position"] = teammates_count + 1
+
+        curr_run = p_stats["runs"]
+        if curr_run >= 50 and 50 not in p_stats["milestone_balls"]: p_stats["milestone_balls"][50] = p_stats["balls"]
+        if curr_run >= 100 and 100 not in p_stats["milestone_balls"]: p_stats["milestone_balls"][100] = p_stats["balls"]
+        if curr_run >= 150 and 150 not in p_stats["milestone_balls"]: p_stats["milestone_balls"][150] = p_stats["balls"]
+        if curr_run >= 200 and 200 not in p_stats["milestone_balls"]: p_stats["milestone_balls"][200] = p_stats["balls"]
+
+        if 'wicket_type' in row and row['wicket_type'] != "":
+            player_out = row['player_dismissed']
+            if player_out in innings_stats:
+                innings_stats[player_out]["is_out"] = True
+            
+            wt = row['wicket_type']
+            if wt not in ["run out", "hit ball twice", "obstructing the field", "retired hurt"]:
+                 if bowler not in bowler_innings_stats:
+                     bowler_innings_stats[bowler] = {
+                         "name": bowler, "team": bowling_team, "opposition": batting_team,
+                         "total_wickets": 0, "total_runs": 0, "total_balls": 0,
+                         "phases": {"Powerplay": {"w":0, "r":0}, "Middle": {"w":0, "r":0}, "Death": {"w":0, "r":0}},
+                         "venue": current_match_info.get('venue', '')
+                     }
+                 b_stats = bowler_innings_stats[bowler]
+                 b_stats["total_wickets"] += 1
+                 b_stats["phases"][phase]["w"] += 1
+                 team_innings_stats[phase]["wickets"] += 1
+
+        if bowler not in bowler_innings_stats:
+             bowler_innings_stats[bowler] = {
+                 "name": bowler, "team": bowling_team, "opposition": batting_team,
+                 "total_wickets": 0, "total_runs": 0, "total_balls": 0,
+                 "phases": {"Powerplay": {"w":0, "r":0}, "Middle": {"w":0, "r":0}, "Death": {"w":0, "r":0}},
+                 "venue": current_match_info.get('venue', '')
+             }
         
-        milestone_data = []
-        for p in reached:
-            milestone_data.append({
-                "name": p['name'],
-                "team": p['team'],
-                "balls": p['milestone_balls'][m]
-            })
-        fastest_milestones[str(m)] = milestone_data
-
-    # 2.5 Fastest to Milestones (Innings)
-    fastest_milestones_innings = {}
-
-    for m in milestones:
-        # Filter players who reached this milestone
-        reached = [p for p in all_players if m in p['milestone_innings']]
-        # Sort by innings taken to reach it
-        reached.sort(key=lambda x: x['milestone_innings'][m])
+        b_estats = bowler_innings_stats[bowler]
+        r_conceded = runs_off_bat
+        try:
+             w = int(row.get('wides', 0))
+             nb = int(row.get('noballs', 0))
+             r_conceded += (w + nb)
+        except: pass
+        b_estats["total_runs"] += r_conceded
+        b_estats["phases"][phase]["r"] += r_conceded
         
-        milestone_data = []
-        for p in reached:
-            milestone_data.append({
-                "name": p['name'],
-                "team": p['team'],
-                "innings": p['milestone_innings'][m]
-            })
-        fastest_milestones_innings[str(m)] = milestone_data
-
-    # 3. Highest Scores
-    all_innings = list(innings_stats.values())
-    all_innings.sort(key=lambda x: x['runs'], reverse=True)
-    highest_scores_list = all_innings[:10] # Top 10
-
-    # 4. Fastest Innings Milestones
-    fastest_innings_milestones = {}
-    
-    for m in innings_milestones:
-        # Filter innings that reached this milestone
-        reached = [inn for inn in all_innings if m in inn['milestones']]
-        # Sort by balls taken to reach it
-        reached.sort(key=lambda x: x['milestones'][m])
+        is_valid = True
+        try:
+            if int(row.get('wides', 0)) > 0 or int(row.get('noballs', 0)) > 0: is_valid = False
+        except: pass
+        if is_valid: b_estats["total_balls"] += 1
         
-        milestone_data = []
-        for inn in reached:
-            milestone_data.append({
-                "name": inn['name'],
-                "team": inn['team'],
-                "minq": inn['opposition'],
-                "venue": inn['venue'],
-                "balls": inn['milestones'][m],
-                "date": inn['date'],
-                "runs": inn['runs'], # Final score
-                "position": inn['position']
-            })
-        fastest_innings_milestones[str(m)] = milestone_data
+        team_innings_stats[phase]["runs"] += total_runs
 
-    # --- PROCESS PHASE STATS ---
-    print("Processing phase stats...")
-    
-    final_phase_stats = {
-        "batsman_runs": {},
-        "bowler_wickets": {},
-        "team_innings_highs": {},
-        "batsman_innings_highs": {},
-        "bowler_innings_wickets": {}
-    }
-    
-    phases = ["Powerplay", "Middle", "Death"]
-    
-    # 1. Career Stats (Batsman Runs & Bowler Wickets)
-    for phase in phases:
-        # Batsmen
-        p_batsmen = list(phase_stats[phase]["batsmen"].values())
-        p_batsmen.sort(key=lambda x: x['value'], reverse=True)
-        final_phase_stats["batsman_runs"][phase] = p_batsmen[:50]
+
+    if current_match_id is not None:
+        active_contexts = [contexts['all']]
+        event = current_match_info.get('event', '')
         
-        # Bowlers
-        p_bowlers = list(phase_stats[phase]["bowlers"].values())
-        p_bowlers.sort(key=lambda x: x['value'], reverse=True)
-        final_phase_stats["bowler_wickets"][phase] = p_bowlers[:50]
+        # Check year first
+        year = ""
+        if current_match_date and len(current_match_date) >= 4:
+                year = current_match_date[:4]
         
-    # 2. Team Innings Highs
-    team_highs = { p: [] for p in phases }
-    
-    for key, stats in team_innings_stats.items():
-        for phase in phases:
-            if stats[phase]['runs'] > 0:
-                team_highs[phase].append({
-                    "team": stats['team'],
-                    "opposition": stats['opposition'],
-                    "runs": stats[phase]['runs'],
-                    "wickets": stats[phase]['wickets'],
-                    "date": stats['date'],
-                    "venue": stats.get('venue', 'N/A'),
-                    "balls": stats[phase]['balls'],
-                    "result": match_outcomes.get(str(key[0]), "Normal")
-                })
-                
-    for phase in phases:
-        team_highs[phase].sort(key=lambda x: x['runs'], reverse=True)
-        # Export ALL records for Team Highs to allow "Lowest Score" analysis
-        final_phase_stats["team_innings_highs"][phase] = team_highs[phase]
+        if is_world_cup(event) and year in VALID_WC_YEARS:
+            active_contexts.append(contexts['wc'])
+            wc_key = f"wc_{year}"
+            if wc_key not in contexts: contexts[wc_key] = StatsContext(wc_key)
+            active_contexts.append(contexts[wc_key])
 
-    # 3. Batsman Innings Phase Highs
-    batsman_phase_highs = { p: [] for p in phases }
-    
-    for key, stats in innings_stats.items():
-        # key is (match_id, striker)
-        if 'phases' in stats:
-            for phase in phases:
-                p_run = stats['phases'][phase]['runs']
-                p_ball = stats['phases'][phase]['balls']
-                if p_run > 0:
-                     batsman_phase_highs[phase].append({
-                         "name": stats['name'],
-                         "team": stats['team'],
-                         "opposition": stats['opposition'],
-                         "runs": p_run,
-                         "balls": p_ball,
-                         "date": stats['date'],
-                         "venue": stats.get('venue', 'N/A')
-                     })
+        for ctx in active_contexts:
+            ctx.process_match(innings_stats, bowler_innings_stats, team_innings_stats, current_match_id, current_match_date, current_match_info)
 
-    for phase in phases:
-        batsman_phase_highs[phase].sort(key=lambda x: x['runs'], reverse=True)
-        final_phase_stats["batsman_innings_highs"][phase] = batsman_phase_highs[phase][:2000]
+    print("Finalizing Data...")
+    output_tree = { "tournaments": {} }
+    output_tree.update(contexts['all'].get_final_data()) 
+    for key, ctx in contexts.items():
+        if key == 'all': continue
+        output_tree["tournaments"][key] = ctx.get_final_data()
 
-    # 4. Bowler Innings Phase Best
-    bowler_phase_best = { p: [] for p in phases }
-    
-    for key, stats in bowler_innings_stats.items():
-        for phase in phases:
-             p_w = stats['phases'][phase]['w']
-             p_r = stats['phases'][phase]['r']
-             # Include if taken wickets OR just high usage? User asked for "Highest Score" list against them, 
-             # but typically "Best Bowling" is Wickets. "Highest Score against bowler" would be Runs Conceded.
-             # Let's provide BOTH if possible or just Wickets for "Best".
-             # User Request: "highest phase score list by a batsmen ,bowler" -> Ambiguous.
-             # "Highest score list by a bowler" -> Likely Best Bowling (Wickets).
-             # If "Score against a bowler", that's "Worst Bowling".
-             # I will stick to "Best Bowling (Wickets)" for now as it's a positive stat. 
-             # I'll sort by Wickets DESC, then Runs Conceded ASC.
-             if p_w > 0:
-                 bowler_phase_best[phase].append({
-                     "name": stats['name'],
-                     "team": stats['team'],
-                     "opposition": stats['opposition'],
-                     "value": p_w, # Wickets
-                     "runs": p_r,
-                     "date": stats['date'],
-                     "venue": stats.get('venue', 'N/A')
-                 })
-                 
-    for phase in phases:
-        # Sort by Wickets Desc, then Runs Asc
-        bowler_phase_best[phase].sort(key=lambda x: (x['value'], -x['runs']), reverse=True) 
-        # Wait, if x['runs'] is secondary sort (asc), negation works for simple scalar if main is reverse?
-        # Sort key tuple: (Wickets DESC, Runs ASC)
-        # Python sort reverse=True: (High Wickets, High Runs). We want (High Wickets, Low Runs).
-        # So we want key (Wickets, -Runs).
-        # Example: 3w 10r -> (3, -10). 3w 20r -> (3, -20). 
-        # -10 > -20. So 3w 10r comes first. Correct.
-        bowler_phase_best[phase].sort(key=lambda x: (x['value'], -x['runs']), reverse=True)
-        final_phase_stats["bowler_innings_wickets"][phase] = bowler_phase_best[phase][:2000]
-
-
-    final_data = {
-        "most_runs": most_runs_list,
-        "most_runs_by_position": most_runs_by_position,
-        "fastest_milestones": fastest_milestones,
-        "fastest_milestones_innings": fastest_milestones_innings,
-        "highest_scores": highest_scores_list,
-        "fastest_innings_milestones": fastest_innings_milestones,
-        "phase_stats": final_phase_stats,
-        
-        # New Bowling Stats
-        "fastest_wickets": {
-            "overall": fastest_wickets_overall,
-            "for_team": fastest_wickets_team,
-            "vs_team": fastest_wickets_vs,
-            "team_vs": fastest_wickets_team_vs
-        },
-        "best_figures": {
-            "4_wickets": best_figures_4,
-            "5_wickets": best_figures_5
-        },
-        "most_wickets": {
-             "overall": most_wickets_overall,
-             "for_team": most_wickets_team,
-             "vs_team": most_wickets_vs,
-             "team_vs": most_wickets_team_vs
-        },
-        "most_hauls": {
-             "4w": most_4w_hauls,
-             "5w": most_5w_hauls
-        },
-        "innings_milestones": output_data["innings_milestones"]
-    }
-    
-    OUTPUT_FILE = "data.js"
-    print(f"Writing to {OUTPUT_FILE}...")
-    with open(OUTPUT_FILE, 'w') as f:
-        f.write("const t20Data = ")
-        json.dump(final_data, f, indent=2)
-        f.write(";")
-    print("Success.")
+    print("Writing data.js...")
+    with open("data.js", "w", encoding="utf-8") as f:
+        f.write(f"const statsData = {json.dumps(output_tree, indent=4)};")
+    print("Done!")
 
 if __name__ == "__main__":
-    if download_and_extract():
-        process_data()
+    download_and_extract()
+    process_data()
